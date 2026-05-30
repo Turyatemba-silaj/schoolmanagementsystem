@@ -1,0 +1,76 @@
+{% extends 'core/base.html' %}
+{% block title %}Payroll - School Management{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <p class="text-uppercase text-success fw-bold mb-1">Salary Generation</p>
+        <h1>Payroll</h1>
+        <p class="text-muted mb-0">Payroll is computed from staff attendance. Present and sick days are payable; absent and suspension days are deducted.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'staff_attendance_marking' %}">Mark Staff Attendance</a>
+</div>
+
+<form method="post" class="attendance-filter mb-4">
+    {% csrf_token %}
+    <div>
+        <label for="month" class="form-label">Month</label>
+        <input type="number" min="1" max="12" name="month" id="month" value="{{ month }}" class="form-control">
+    </div>
+    <div>
+        <label for="year" class="form-label">Year</label>
+        <input type="number" min="2020" max="2100" name="year" id="year" value="{{ year }}" class="form-control">
+    </div>
+    <div class="attendance-filter__action">
+        <button type="submit" class="btn btn-success">Generate Payroll</button>
+    </div>
+</form>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4"><div class="metric-card"><span>Base Salary</span><strong>{{ totals.base|default:0 }}</strong></div></div>
+    <div class="col-md-4"><div class="metric-card metric-card--light"><span>Deductions</span><strong>{{ totals.deductions|default:0 }}</strong></div></div>
+    <div class="col-md-4"><div class="metric-card"><span>Net Salary</span><strong>{{ totals.net|default:0 }}</strong></div></div>
+</div>
+
+<div class="section-panel">
+    <div class="section-panel__header">
+        <h2>Payroll for {{ month }}/{{ year }}</h2>
+        <span class="text-muted">{{ payrolls|length }} records</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Staff</th>
+                    <th>Department</th>
+                    <th>Base</th>
+                    <th>P</th>
+                    <th>S</th>
+                    <th>A</th>
+                    <th>X</th>
+                    <th>Payable</th>
+                    <th>Deductions</th>
+                    <th>Net Salary</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for payroll in payrolls %}
+                    <tr>
+                        <td><a href="{% url 'staff_detail' payroll.staff.pk %}">{{ payroll.staff.full_name }}</a></td>
+                        <td>{{ payroll.staff.department|default:'-' }}</td>
+                        <td>{{ payroll.base_salary }}</td>
+                        <td>{{ payroll.present_days }}</td>
+                        <td>{{ payroll.sick_days }}</td>
+                        <td>{{ payroll.absent_days }}</td>
+                        <td>{{ payroll.suspension_days }}</td>
+                        <td>{{ payroll.payable_days }}/{{ payroll.working_days }}</td>
+                        <td>{{ payroll.deductions }}</td>
+                        <td><strong>{{ payroll.net_salary }}</strong></td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="10" class="text-muted">No payroll has been generated for this month yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends 'core/base.html' %}
+{% block title %}Payments - School Management{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <p class="text-uppercase text-success fw-bold mb-1">Finance Office</p>
+        <h1>Student Payments</h1>
+        <p class="text-muted mb-0">Track payment codes, deposit slip/mobile money references, fees, paid amount, and balances.</p>
+    </div>
+    <a class="btn btn-success" href="{% url 'payment_add' %}">Record Payment</a>
+</div>
+
+<div class="section-panel">
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Payment Code</th>
+                    <th>Name</th>
+                    <th>Class</th>
+                    <th>Fees</th>
+                    <th>Expected Fees</th>
+                    <th>Amount Paid</th>
+                    <th>Balance</th>
+                    <th>Deposit / Mobile Ref.</th>
+                    <th>Paid By</th>
+                    <th>Receipted By</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for payment in payments %}
+                    <tr>
+                        <td>{{ payment.student.admission_no }}</td>
+                        <td><a href="{% url 'student_detail' payment.student.pk %}">{{ payment.student }}</a></td>
+                        <td>{{ payment.fees_structure.school_class|default:'-' }}</td>
+                        <td>{{ payment.fees_structure|default:'-' }}</td>
+                        <td>{{ payment.fees_structure.amount|default:'-' }}</td>
+                        <td>{{ payment.amount_paid }}</td>
+                        <td>
+                            {% if payment.balance <= 0 %}
+                                <span class="attendance-pill attendance-pill--success">Cleared</span>
+                            {% else %}
+                                <span class="attendance-pill attendance-pill--danger">{{ payment.balance }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ payment.transaction_id|default:'-' }}</td>
+                        <td>{{ payment.paid_by|default:'-' }}</td>
+                        <td>{{ payment.receipted_by|default:'-' }}</td>
+                        <td class="text-end">
+                            <a class="btn btn-sm btn-outline-primary" href="{% url 'payment_edit' payment.pk %}">Edit</a>
+                            {% if payment.balance > 0 %}
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="student_id" value="{{ payment.student.pk }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Send Reminder</button>
+                                </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="11" class="text-muted">No payments recorded.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

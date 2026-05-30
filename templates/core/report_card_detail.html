@@ -1,0 +1,146 @@
+{% extends 'core/base.html' %}
+{% block title %}{{ student }} Report Card{% endblock %}
+{% block content %}
+<div class="report-card">
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <p class="text-uppercase text-success fw-bold mb-1">Official Student Report Card</p>
+            <h1>{{ student }}</h1>
+            <p class="text-muted mb-0">Generated on {{ generated_on }}</p>
+        </div>
+        <div class="d-flex gap-2">
+            {% if fees_cleared %}
+                <button type="button" class="btn btn-outline-success" onclick="window.print()">Print Report Card</button>
+            {% endif %}
+            <a class="btn btn-outline-secondary" href="{% url 'report_card_index' %}">Back</a>
+        </div>
+    </div>
+
+    {% if not fees_cleared %}
+        <div class="section-panel">
+            <h2>Report Card Blocked</h2>
+            <p class="mb-2">This student's report card cannot be generated because school fees have not been cleared.</p>
+            <div class="table-responsive">
+                <table class="table table-bordered report-table">
+                    <tbody>
+                        <tr>
+                            <th>Student No.</th><td>{{ student.admission_no }}</td>
+                            <th>Name</th><td>{{ student }}</td>
+                            <th>Outstanding Balance</th>
+                            <td>{% if latest_payment %}{{ latest_payment.balance }}{% else %}No payment record{% endif %}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <a class="btn btn-success mt-3" href="{% url 'payment_list' %}">Open Payments</a>
+        </div>
+    {% else %}
+    <section class="report-card-header">
+        <div>
+            <h2>Kyabuza Muslim Secondary School</h2>
+            <p>Student academic performance report</p>
+        </div>
+        <div>
+            <strong>Admission No.</strong>
+            <span>{{ student.admission_no }}</span>
+        </div>
+    </section>
+
+    <section class="report-section">
+        <h2>Student Details</h2>
+        <div class="table-responsive">
+            <table class="table table-bordered report-table">
+                <tbody>
+                    <tr>
+                        <th>Name</th><td>{{ student }}</td>
+                        <th>Class</th><td>{{ enrollment.school_class|default:'-' }}</td>
+                        <th>Stream</th><td>{{ enrollment.stream|default:'-' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Academic Year</th><td>{{ enrollment.year|default:'-' }}</td>
+                        <th>Gender</th><td>{{ student.gender }}</td>
+                        <th>Guardian</th>
+                        <td>
+                            {% for link in guardians %}
+                                {{ link.guardian.full_name }}{% if not forloop.last %}, {% endif %}
+                            {% empty %}
+                                -
+                            {% endfor %}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="report-section">
+        <h2>Exam Results</h2>
+        <div class="table-responsive">
+            <table class="table table-bordered report-table">
+                <thead>
+                    <tr>
+                        <th>Subject</th>
+                        <th>Exam</th>
+                        <th>Exam Date</th>
+                        <th>Maximum Marks</th>
+                        <th>Marks Obtained</th>
+                        <th>Grade</th>
+                        <th>Remarks</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for result in exam_results %}
+                        <tr>
+                            <td>{{ result.subject }}</td>
+                            <td>{{ result.exam.exam_name }}</td>
+                            <td>{{ result.exam.exam_date }}</td>
+                            <td>{{ result.exam.max_marks }}</td>
+                            <td>{{ result.marks_obtained }}</td>
+                            <td>{{ result.grade }}</td>
+                            <td>{{ result.remarks }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="7" class="text-muted">No exam results found for this student.</td></tr>
+                    {% endfor %}
+                    <tr class="report-total-row">
+                        <th colspan="4">Total / Average</th>
+                        <th>{{ total_marks }}</th>
+                        <th colspan="2">Average: {{ average_mark|floatformat:1 }}</th>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="report-section">
+        <h2>Attendance & Fees</h2>
+        <div class="table-responsive">
+            <table class="table table-bordered report-table">
+                <tbody>
+                    <tr>
+                        <th>Present</th><td>{{ attendance_present }}</td>
+                        <th>Absent</th><td>{{ attendance_absent }}</td>
+                        <th>Sick</th><td>{{ attendance_sick }}</td>
+                        <th>Suspension</th><td>{{ attendance_suspended }}</td>
+                    </tr>
+                    <tr>
+                        <th>Fee Status</th>
+                        <td>{% if fees_cleared %}Cleared{% else %}Not Cleared{% endif %}</td>
+                        <th>Latest Balance</th>
+                        <td>{% if latest_payment %}{{ latest_payment.balance }}{% else %}No payment{% endif %}</td>
+                        <th>Latest Payment</th>
+                        <td colspan="3">{% if latest_payment %}{{ latest_payment.amount_paid }} on {{ latest_payment.payment_date }}{% else %}-{% endif %}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="report-card-signatures">
+        <div><span>Class Teacher</span></div>
+        <div><span>Director of Studies</span></div>
+        <div><span>Head Teacher</span></div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

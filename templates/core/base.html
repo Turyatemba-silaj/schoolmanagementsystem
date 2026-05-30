@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}School Management{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{% static 'core/css/site.css' %}" rel="stylesheet">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="app-sidebar">
+        <a class="app-brand" href="{% url 'home' %}">
+            <span class="app-brand__mark">KM</span>
+            <span>Kyabuza Muslim Secondary School</span>
+        </a>
+
+        <nav class="app-nav app-nav--dropdown" aria-label="Sidebar navigation">
+            <details class="app-menu" open>
+                <summary>
+                    <span>Main</span>
+                    <span class="app-menu__chevron">›</span>
+                </summary>
+                <div class="app-menu__items">
+                    <a href="{% url 'home' %}"><span>Home</span></a>
+                    <a href="{% url 'dashboard' %}"><span>Dashboard</span></a>
+                    <a href="{% url 'student_list' %}"><span>Students</span></a>
+                    <a href="{% url 'staff_list' %}"><span>Staff</span></a>
+                    <a href="{% url 'class_list' %}"><span>Classes</span></a>
+                    <a href="{% url 'application_list' %}"><span>Applications</span></a>
+                </div>
+            </details>
+
+            <details class="app-menu" open>
+                <summary>
+                    <span>Operations</span>
+                    <span class="app-menu__chevron">›</span>
+                </summary>
+                <div class="app-menu__items">
+                    <a href="{% url 'attendance_marking' %}"><span>Student Attendance</span></a>
+                    <a href="{% url 'staff_attendance_marking' %}"><span>Staff Attendance</span></a>
+                    <a href="{% url 'payment_list' %}"><span>Payments</span></a>
+                    <a href="{% url 'payee_login' %}"><span>Pay Fees</span></a>
+                    <a href="{% url 'payroll_list' %}"><span>Payroll</span></a>
+                    <a href="{% url 'exam_result_list' %}"><span>Exams</span></a>
+                    <a href="{% url 'report_card_index' %}"><span>Report Cards</span></a>
+                </div>
+            </details>
+
+            <details class="app-menu">
+                <summary>
+                    <span>System</span>
+                    <span class="app-menu__chevron">›</span>
+                </summary>
+                <div class="app-menu__items">
+                    <a href="{% url 'manage_index' %}"><span>Manage Tables</span></a>
+                </div>
+            </details>
+        </nav>
+    </aside>
+
+    <main class="app-main">
+        <header class="app-topbar">
+            <div>
+                <strong>School Management</strong>
+                
+            </div>
+            <div class="app-user">
+                {% if user.is_authenticated %}
+                    <span>Hello, {{ user.username }}</span>
+                    <form method="post" action="{% url 'logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-primary">Logout</button>
+                    </form>
+                {% else %}
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'payee_login' %}">Pay Fees</a>
+                    <a class="btn btn-sm btn-primary" href="{% url 'login' %}">Login</a>
+                {% endif %}
+            </div>
+        </header>
+
+        <div class="app-content">
+            {% if messages %}
+                <div class="messages">
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

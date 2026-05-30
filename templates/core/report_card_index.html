@@ -1,0 +1,59 @@
+{% extends 'core/base.html' %}
+{% block title %}Report Cards - School Management{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <p class="text-uppercase text-success fw-bold mb-1">Academic Reports</p>
+        <h1>Generate Student Report Cards</h1>
+        <p class="text-muted mb-0">Select a student to generate a printable report card from exam results.</p>
+    </div>
+    <a class="btn btn-outline-primary" href="{% url 'exam_result_list' %}">Exam Results</a>
+</div>
+
+<div class="section-panel">
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Student No.</th>
+                    <th>Name</th>
+                    <th>Current Class</th>
+                    <th>Stream</th>
+                    <th>Exam Records</th>
+                    <th>Fees</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in student_rows %}
+                    <tr>
+                        <td>{{ row.student.admission_no }}</td>
+                        <td>{{ row.student }}</td>
+                        <td>{{ row.enrollment.school_class|default:'-' }}</td>
+                        <td>{{ row.enrollment.stream|default:'-' }}</td>
+                        <td>{{ row.result_count }}</td>
+                        <td>
+                            {% if row.fees_cleared %}
+                                <span class="attendance-pill attendance-pill--success">Cleared</span>
+                            {% else %}
+                                <span class="attendance-pill attendance-pill--danger">
+                                    Balance {% if row.latest_payment %}{{ row.latest_payment.balance }}{% else %}No payment{% endif %}
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if row.fees_cleared %}
+                                <a class="btn btn-sm btn-success" href="{% url 'report_card_detail' row.student.pk %}">Generate Report Card</a>
+                            {% else %}
+                                <button type="button" class="btn btn-sm btn-outline-danger" disabled>Blocked</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="7" class="text-muted">No students found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends 'core/base.html' %}
+{% block title %}{% if form.instance.pk %}Edit Staff{% else %}Add Staff{% endif %} - School Management{% endblock %}
+{% block content %}
+<div class="form-shell">
+    <h1>{% if form.instance.pk %}Edit Staff{% else %}Add Staff{% endif %}</h1>
+    <form method="post" class="section-panel">
+        {% csrf_token %}
+        {% include 'core/_form_fields.html' %}
+        <button type="submit" class="btn btn-success">Save</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,205 @@
+{% extends 'core/base.html' %}
+{% block title %}SchoolDashboard - School Management{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1>School Dashboard</h1>
+        
+    </div>
+    <a class="btn btn-success" href="{% url 'manage_index' %}">Manage Records</a>
+</div>
+
+{{ dashboard_charts|json_script:"dashboard-chart-data" }}
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-6">
+        <div class="section-panel dashboard-chart-panel">
+            <div class="section-panel__header">
+                <h2>School Overview</h2>
+                <span class="text-muted">Core records</span>
+            </div>
+            <canvas id="overviewChart"></canvas>
+        </div>
+    </div>
+    <div class="col-xl-6">
+        <div class="section-panel dashboard-chart-panel">
+            <div class="section-panel__header">
+                <h2>Class Enrollment</h2>
+                <span class="text-muted">Students per class</span>
+            </div>
+            <canvas id="classChart"></canvas>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="section-panel dashboard-chart-panel dashboard-chart-panel--small">
+            <div class="section-panel__header">
+                <h2>Attendance</h2>
+                <span class="text-muted">P / A / S / X</span>
+            </div>
+            <canvas id="attendanceChart"></canvas>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="section-panel dashboard-chart-panel dashboard-chart-panel--small">
+            <div class="section-panel__header">
+                <h2>Finance</h2>
+                <span class="text-muted">Paid vs balance</span>
+            </div>
+            <canvas id="financeChart"></canvas>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="section-panel dashboard-chart-panel dashboard-chart-panel--small">
+            <div class="section-panel__header">
+                <h2>Applications</h2>
+                <span class="text-muted">By status</span>
+            </div>
+            <canvas id="applicationChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="section-panel">
+            <div class="section-panel__header">
+                <h2>Class Operations</h2>
+                <span class="text-muted">Students, subjects, fees</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Class</th><th>Students</th><th>Subjects</th><th>Fee Plans</th><th></th></tr></thead>
+                    <tbody>
+                        {% for class in class_overview %}
+                            <tr>
+                                <td>{{ class.class_name }}</td>
+                                <td>{{ class.enrollment_count }}</td>
+                                <td>{{ class.subject_count }}</td>
+                                <td>{{ class.fee_count }}</td>
+                                <td><a class="btn btn-sm btn-outline-success" href="{% url 'class_detail' class.pk %}">Open</a></td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="5">No classes found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="section-panel">
+            <div class="section-panel__header">
+                <h2>Attendance Snapshot</h2>
+                <span class="text-muted">Present {{ attendance_present_count }} / Absent {{ attendance_absent_count }}</span>
+            </div>
+            <p class="dashboard-score">{{ average_score|floatformat:1 }}</p>
+            <p class="text-muted">Average exam result across recorded marks.</p>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-lg-4">
+        <div class="section-panel">
+            <h2>Recent Students</h2>
+            <ul class="list-unstyled mb-0">
+                {% for student in recent_students %}
+                    <li class="linked-list-row"><a href="{% url 'student_detail' student.pk %}">{{ student }}</a><span>{{ student.admission_no }}</span></li>
+                {% empty %}
+                    <li class="text-muted">No students yet.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="section-panel">
+            <h2>Recent Payments</h2>
+            <ul class="list-unstyled mb-0">
+                {% for payment in recent_payments %}
+                    <li class="linked-list-row"><span>{{ payment.student }}</span><strong>{{ payment.amount_paid }}</strong></li>
+                {% empty %}
+                    <li class="text-muted">No payments yet.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="section-panel">
+            <h2>Upcoming Events</h2>
+            <ul class="list-unstyled mb-0">
+                {% for event in upcoming_events %}
+                    <li class="linked-list-row"><span>{{ event.event_title }}</span><strong>{{ event.start_date }}</strong></li>
+                {% empty %}
+                    <li class="text-muted">No events yet.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+    const dashboardCharts = JSON.parse(document.getElementById('dashboard-chart-data').textContent);
+    const chartColors = ['#1f6fb2', '#58b4ff', '#11a37f', '#f5a524', '#d94841', '#7c5cff'];
+    const gridColor = 'rgba(31, 45, 61, 0.08)';
+
+    function hasChartData(values) {
+        return values.some((value) => Number(value) > 0);
+    }
+
+    function renderBarChart(elementId, chartData, label) {
+        const ctx = document.getElementById(elementId);
+        if (!ctx || !hasChartData(chartData.values)) return;
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    label: label,
+                    data: chartData.values,
+                    backgroundColor: chartColors,
+                    borderRadius: 5,
+                    maxBarThickness: 42
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: gridColor } }
+                }
+            }
+        });
+    }
+
+    function renderPieChart(elementId, chartData, type) {
+        const ctx = document.getElementById(elementId);
+        if (!ctx || !hasChartData(chartData.values)) return;
+        new Chart(ctx, {
+            type: type,
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    data: chartData.values,
+                    backgroundColor: chartColors,
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } },
+                cutout: type === 'doughnut' ? '58%' : 0
+            }
+        });
+    }
+
+    renderBarChart('overviewChart', dashboardCharts.overview, 'Records');
+    renderBarChart('classChart', dashboardCharts.classes, 'Students');
+    renderPieChart('attendanceChart', dashboardCharts.attendance, 'doughnut');
+    renderPieChart('financeChart', dashboardCharts.finance, 'pie');
+    renderPieChart('applicationChart', dashboardCharts.applications, 'doughnut');
+</script>
+{% endblock %}

@@ -1,0 +1,53 @@
+from django.urls import path
+from django.contrib.auth.views import LoginView, LogoutView
+
+from . import views
+from .forms import BootstrapAuthenticationForm
+
+urlpatterns = [
+    path('', views.HomeView.as_view(), name='home'),
+    path(
+        'login/',
+        LoginView.as_view(
+            template_name='registration/login.html',
+            authentication_form=BootstrapAuthenticationForm,
+        ),
+        name='login',
+    ),
+    path('logout/', LogoutView.as_view(), name='logout'),
+    path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
+    path('students/', views.StudentListView.as_view(), name='student_list'),
+    path('students/add/', views.StudentCreateView.as_view(), name='student_add'),
+    path('students/<int:pk>/', views.StudentDetailView.as_view(), name='student_detail'),
+    path('students/<int:pk>/edit/', views.StudentUpdateView.as_view(), name='student_edit'),
+    path('staff/', views.StaffListView.as_view(), name='staff_list'),
+    path('staff/add/', views.StaffCreateView.as_view(), name='staff_add'),
+    path('staff/attendance/', views.staff_attendance_marking, name='staff_attendance_marking'),
+    path('staff/payroll/', views.payroll_list, name='payroll_list'),
+    path('staff/<int:pk>/', views.StaffDetailView.as_view(), name='staff_detail'),
+    path('staff/<int:pk>/edit/', views.StaffUpdateView.as_view(), name='staff_edit'),
+    path('classes/', views.ClassListView.as_view(), name='class_list'),
+    path('classes/add/', views.ClassCreateView.as_view(), name='class_add'),
+    path('classes/<int:pk>/', views.ClassDetailView.as_view(), name='class_detail'),
+    path('classes/<int:pk>/edit/', views.ClassUpdateView.as_view(), name='class_edit'),
+    path('attendance/', views.attendance_marking, name='attendance_marking'),
+    path('payments/', views.PaymentListView.as_view(), name='payment_list'),
+    path('payments/add/', views.PaymentCreateView.as_view(), name='payment_add'),
+    path('payments/<int:pk>/edit/', views.PaymentUpdateView.as_view(), name='payment_edit'),
+    path('payee/login/', views.payee_login, name='payee_login'),
+    path('payee/payments/', views.payee_payments, name='payee_payments'),
+    path('payee/logout/', views.payee_logout, name='payee_logout'),
+    path('exams/results/', views.ExamResultListView.as_view(), name='exam_result_list'),
+    path('report-cards/', views.ReportCardIndexView.as_view(), name='report_card_index'),
+    path('report-cards/<int:pk>/', views.ReportCardDetailView.as_view(), name='report_card_detail'),
+    path('applications/', views.ApplicationListView.as_view(), name='application_list'),
+    path('applications/add/', views.ApplicationCreateView.as_view(), name='application_add'),
+    path('applications/<int:pk>/', views.ApplicationDetailView.as_view(), name='application_detail'),
+    path('applications/<int:pk>/edit/', views.ApplicationUpdateView.as_view(), name='application_edit'),
+    path('manage/', views.ManageIndexView.as_view(), name='manage_index'),
+    path('manage/<slug:model_name>/', views.ManagedListView.as_view(), name='manage_model_list'),
+    path('manage/<slug:model_name>/add/', views.ManagedCreateView.as_view(), name='manage_model_add'),
+    path('manage/<slug:model_name>/<int:pk>/edit/', views.ManagedUpdateView.as_view(), name='manage_model_edit'),
+    path('api/students/', views.students_json, name='students_json'),
+    path('api/staff/', views.staff_json, name='staff_json'),
+]

@@ -1,0 +1,33 @@
+{% extends 'core/base.html' %}
+{% block title %}Classes - School Management{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Classes</h1>
+    <a class="btn btn-success" href="{% url 'class_add' %}">Add Class</a>
+</div>
+<div class="table-responsive">
+<table class="table table-striped">
+    <thead>
+        <tr><th>Name</th><th>Level</th><th>Streams</th><th>Subjects</th><th>Students</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+        {% for school_class in classes %}
+            <tr>
+                <td>{{ school_class.class_name }}</td>
+                <td>{{ school_class.class_level }}</td>
+                <td>{{ school_class.stream_count }}</td>
+                <td>{{ school_class.subject_count }}</td>
+                <td>{{ school_class.enrollment_count }}</td>
+                <td>{{ school_class.status }}</td>
+                <td>
+                    <a class="btn btn-sm btn-outline-success" href="{% url 'class_detail' school_class.pk %}">Open</a>
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'class_edit' school_class.pk %}">Edit</a>
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="7">No classes found.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

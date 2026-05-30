@@ -1,0 +1,32 @@
+<div class="section-panel h-100">
+    <h2>{{ title }}</h2>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <tbody>
+                {% for row in rows %}
+                    <tr>
+                        {% if mode == 'exam' %}
+                            <td>{{ row.exam }}</td><td>{{ row.subject }}</td><td><strong>{{ row.marks_obtained }}</strong> {{ row.grade }}</td>
+                        {% elif mode == 'attendance' %}
+                            <td>{{ row.attendance_date }}</td><td>{{ row.school_class }}</td><td>{{ row.status }}</td>
+                        {% elif mode == 'payment' %}
+                            <td>{{ row.payment_date }}</td><td>{{ row.payment_method }}</td><td><strong>{{ row.amount_paid }}</strong></td>
+                        {% elif mode == 'library' %}
+                            <td>{{ row.book }}</td><td>{{ row.issue_date }}</td><td>{{ row.status }}</td>
+                        {% elif mode == 'hostel' %}
+                            <td>{{ row.room.hostel }}</td><td>{{ row.room.room_no }}</td><td>{{ row.status }}</td>
+                        {% elif mode == 'transport' %}
+                            <td>{{ row.vehicle }}</td><td>{{ row.allocation_date }}</td><td>{{ row.status }}</td>
+                        {% elif mode == 'health' %}
+                            <td>{{ row.record_date }}</td><td>{{ row.medical_condition }}</td><td>{{ row.doctor_name }}</td>
+                        {% elif mode == 'discipline' %}
+                            <td>{{ row.record_date }}</td><td>{{ row.offence_type }}</td><td>{{ row.status }}</td>
+                        {% endif %}
+                    </tr>
+                {% empty %}
+                    <tr><td class="text-muted">No records found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>

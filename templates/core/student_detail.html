@@ -1,0 +1,183 @@
+{% extends 'core/base.html' %}
+{% block title %}{{ student }} - Student Report{% endblock %}
+{% block content %}
+<div class="report-page">
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <p class="text-uppercase text-success fw-bold mb-1">Student 360 Report</p>
+            <h1>{{ student }}</h1>
+            <p class="text-muted mb-0">Admission No: {{ student.admission_no }} | Status: {{ student.status }}</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-success" onclick="window.print()">Print Report</button>
+            <a class="btn btn-outline-secondary" href="{% url 'student_edit' student.pk %}">Edit Student</a>
+        </div>
+    </div>
+
+    <div class="report-section">
+        <h2>Student Information</h2>
+        <div class="table-responsive">
+            <table class="table table-bordered report-table">
+                <tbody>
+                    <tr>
+                        <th>Student No.</th><td>{{ student.admission_no }}</td>
+                        <th>Name</th><td>{{ student }}</td>
+                        <th>Gender</th><td>{{ student.gender }}</td>
+                    </tr>
+                    <tr>
+                        <th>DOB</th><td>{{ student.dob }}</td>
+                        <th>Blood Group</th><td>{{ student.blood_group }}</td>
+                        <th>Phone</th><td>{{ student.phone }}</td>
+                    </tr>
+                    <tr>
+                        <th>Address</th><td colspan="3">{{ student.address }}</td>
+                        <th>User</th><td>{{ student.user }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="report-section">
+        <h2>Guardians & Enrollment</h2>
+        <div class="table-responsive">
+            <table class="table table-bordered report-table">
+                <thead>
+                    <tr>
+                        <th>Guardian</th>
+                        <th>Relationship</th>
+                        <th>Guardian Phone</th>
+                        <th>Class</th>
+                        <th>Stream</th>
+                        <th>Academic Year</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for link in guardians %}
+                        {% for enrollment in enrollments %}
+                            <tr>
+                                <td>{{ link.guardian.full_name }}</td>
+                                <td>{{ link.relationship }}</td>
+                                <td>{{ link.guardian.phone }}</td>
+                                <td>{{ enrollment.school_class }}</td>
+                                <td>{{ enrollment.stream }}</td>
+                                <td>{{ enrollment.year }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td>{{ link.guardian.full_name }}</td>
+                                <td>{{ link.relationship }}</td>
+                                <td>{{ link.guardian.phone }}</td>
+                                <td colspan="3">No enrollment found</td>
+                            </tr>
+                        {% endfor %}
+                    {% empty %}
+                        <tr><td colspan="6" class="text-muted">No guardians linked.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="report-section">
+        <h2>Fees & Payments</h2>
+        <div class="table-responsive">
+            <table class="table table-bordered report-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Fee Item</th>
+                        <th>Expected Fees</th>
+                        <th>Amount Paid</th>
+                        <th>Balance</th>
+                        <th>Paid By</th>
+                        <th>Receipted By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payment in payments %}
+                        <tr>
+                            <td>{{ payment.payment_date }}</td>
+                            <td>{{ payment.fees_structure|default:'-' }}</td>
+                            <td>{{ payment.fees_structure.amount|default:'-' }}</td>
+                            <td>{{ payment.amount_paid }}</td>
+                            <td>{{ payment.balance }}</td>
+                            <td>{{ payment.paid_by|default:'-' }}</td>
+                            <td>{{ payment.receipted_by|default:'-' }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="7" class="text-muted">No payment records found.</td></tr>
+                    {% endfor %}
+                    <tr class="report-total-row">
+                        <th colspan="3">Totals</th>
+                        <th>{{ fee_total_paid }}</th>
+                        <th>{{ fee_total_balance }}</th>
+                        <th colspan="2"></th>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="report-section">
+        <h2>Exam Results</h2>
+        <div class="table-responsive">
+            <table class="table table-bordered report-table">
+                <thead><tr><th>Exam</th><th>Subject</th><th>Marks</th><th>Grade</th><th>Remarks</th></tr></thead>
+                <tbody>
+                    {% for row in exam_results %}
+                        <tr><td>{{ row.exam }}</td><td>{{ row.subject }}</td><td>{{ row.marks_obtained }}</td><td>{{ row.grade }}</td><td>{{ row.remarks }}</td></tr>
+                    {% empty %}
+                        <tr><td colspan="5" class="text-muted">No exam results found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="report-section">
+        <h2>Attendance</h2>
+        <div class="table-responsive">
+            <table class="table table-bordered report-table">
+                <thead><tr><th>Date</th><th>Class</th><th>Stream</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for row in attendance_records %}
+                        <tr><td>{{ row.attendance_date }}</td><td>{{ row.school_class }}</td><td>{{ row.stream }}</td><td>{{ row.status }}</td></tr>
+                    {% empty %}
+                        <tr><td colspan="4" class="text-muted">No attendance records found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="report-section">
+        <h2>Student Services</h2>
+        <div class="table-responsive">
+            <table class="table table-bordered report-table">
+                <thead><tr><th>Area</th><th>Record</th><th>Date</th><th>Status / Notes</th></tr></thead>
+                <tbody>
+                    {% for row in borrowings %}
+                        <tr><td>Library</td><td>{{ row.book }}</td><td>{{ row.issue_date }}</td><td>{{ row.status }}</td></tr>
+                    {% endfor %}
+                    {% for row in hostel_allocations %}
+                        <tr><td>Hostel</td><td>{{ row.room.hostel }} - {{ row.room.room_no }}</td><td>{{ row.allocation_date }}</td><td>{{ row.status }}</td></tr>
+                    {% endfor %}
+                    {% for row in transport_allocations %}
+                        <tr><td>Transport</td><td>{{ row.vehicle }}</td><td>{{ row.allocation_date }}</td><td>{{ row.status }}</td></tr>
+                    {% endfor %}
+                    {% for row in health_records %}
+                        <tr><td>Health</td><td>{{ row.medical_condition }}</td><td>{{ row.record_date }}</td><td>{{ row.notes }}</td></tr>
+                    {% endfor %}
+                    {% for row in discipline_records %}
+                        <tr><td>Discipline</td><td>{{ row.offence_type }}</td><td>{{ row.record_date }}</td><td>{{ row.status }}</td></tr>
+                    {% endfor %}
+                    {% if not borrowings and not hostel_allocations and not transport_allocations and not health_records and not discipline_records %}
+                        <tr><td colspan="4" class="text-muted">No student service records found.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

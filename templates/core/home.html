@@ -1,0 +1,210 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Kyabuza Muslim  SecondarySchool{% endblock %}
+
+{% block content %}
+<section class="public-top-strip">
+    <div>
+        <strong>Kyabuza Muslim  SecondarySchool</strong>
+        <span>+256 700 000 000</span>
+        <span>info@Kyabuza Muslim  SecondarySchool.com</span>
+    </div>
+    <nav aria-label="Quick links">
+        <a href="#events">News & Events</a>
+        <a href="#gallery">Gallery</a>
+        <a href="{% url 'login' %}">Students Portal</a>
+        <a href="{% url 'login' %}">Parents Portal</a>
+    </nav>
+</section>
+
+<section class="home-hero home-hero--school" style="background-image: linear-gradient(90deg, rgba(8, 42, 36, 0.94), rgba(8, 42, 36, 0.66), rgba(8, 42, 36, 0.1)), url('{% static 'core/img/muslim-school-hero.png' %}');">
+    <div class="home-hero__content">
+        <p class="home-eyebrow">Faith, knowledge, character</p>
+        <h1>Kyabuza Muslim  SecondarySchool</h1>
+        <p class="home-hero__lead">
+            An inclusive Muslim school nurturing curiosity, creativity, discipline,
+            global awareness, and Islamic character through a broad and inspiring education.
+        </p>
+        <div class="home-hero__actions">
+            <a href="{% url 'application_add' %}" class="btn btn-light btn-lg">Apply For Admission</a>
+            {% if user.is_authenticated %}
+                <a href="{% url 'dashboard' %}" class="btn btn-outline-light btn-lg">Go to Dashboard</a>
+            {% else %}
+                <a href="{% url 'login' %}" class="btn btn-outline-light btn-lg">Staff Login</a>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="home-section public-about" id="about">
+    <div class="row g-5 align-items-center">
+        <div class="col-lg-6">
+            <p class="home-eyebrow">A complete school experience</p>
+            <h2>Learning that strengthens mind, faith, and service.</h2>
+            <p>
+                Kyabuza Muslim  SecondarySchool provides a caring environment where every child is challenged,
+                encouraged, and supported as an individual. Our learners grow through strong academics,
+                Qur'an values, respectful conduct, creativity, and leadership.
+            </p>
+            <div class="public-check-grid">
+                <span>Islamic Studies</span>
+                <span>Early Years Foundation</span>
+                <span>Primary Education</span>
+                <span>Lower Secondary</span>
+                <span>International Pathways</span>
+                <span>Special Needs Support</span>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="public-inquiry">
+                <h2>Inquire About A Vacancy</h2>
+                <form>
+                    <input type="text" class="form-control" placeholder="Full name">
+                    <input type="email" class="form-control" placeholder="Active email">
+                    <input type="text" class="form-control" placeholder="Phone number">
+                    <input type="text" class="form-control" placeholder="Subject">
+                    <textarea class="form-control" rows="4" placeholder="Message"></textarea>
+                    <a href="{% url 'application_add' %}" class="btn btn-success btn-lg">Start Application</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="public-stats">
+    <div><strong>8+</strong><span>Years of service</span></div>
+    <div><strong>30k+</strong><span>Global learners inspired</span></div>
+    <div><strong>52+</strong><span>Student nationalities represented</span></div>
+</section>
+
+<section class="home-section public-curriculum" id="curriculum">
+    <div class="section-title-centered">
+        <p class="home-eyebrow">Our curriculum</p>
+        <h2>A one-stop center for wholesome and inclusive education.</h2>
+    </div>
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="curriculum-card">
+                <span>3 to 5 Years</span>
+                <h3>Early Years Foundation</h3>
+                <p>Playful discovery, language growth, social development, and early faith habits.</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="curriculum-card">
+                <span>6 to 11 Years</span>
+                <h3>Primary School</h3>
+                <p>Strong literacy, numeracy, Qur'an learning, science, creativity, and character.</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="curriculum-card">
+                <span>11 to 14 Years</span>
+                <h3>Lower Secondary</h3>
+                <p>Academic depth, leadership, research habits, and preparation for international pathways.</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="curriculum-card">
+                <span>14 to 16 Years</span>
+                <h3>International GCSE</h3>
+                <p>Focused subject choices, assessment readiness, and guided personal development.</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="curriculum-card">
+                <span>16 to 19 Years</span>
+                <h3>Advanced Level</h3>
+                <p>University preparation, mentoring, independent learning, and global citizenship.</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="curriculum-card">
+                <span>Inclusive Support</span>
+                <h3>Special Needs Education</h3>
+                <p>Individual support plans that help each learner participate, progress, and belong.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="public-moments" id="gallery">
+    <div class="row g-4 align-items-center">
+        <div class="col-lg-4">
+            <p class="home-eyebrow">Key children moments</p>
+            <h2>Campus life shaped by confidence, care, and community.</h2>
+            <p>From Qur'an recitation and science fairs to careers day and sports, learners are given space to discover gifts and grow in confidence.</p>
+        </div>
+        <div class="col-lg-8">
+            <div class="moment-grid">
+                <div>Qur'an Recitation</div>
+                <div>Science Fair</div>
+                <div>Careers Day</div>
+                <div>Student Leadership</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="home-section" id="events">
+    <div class="row g-4 align-items-stretch">
+        <div class="col-md-4">
+            <div class="home-feature">
+                <span class="home-feature__icon">01</span>
+                <h2>Islamic Foundation</h2>
+                <p>Daily guidance in adab, prayer discipline, Qur'an learning, and respectful conduct.</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="home-feature">
+                <span class="home-feature__icon">02</span>
+                <h2>Strong Academics</h2>
+                <p>Structured classes, committed teachers, progress tracking, and a culture of excellence.</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="home-feature">
+                <span class="home-feature__icon">03</span>
+                <h2>Whole Child Care</h2>
+                <p>Student records, attendance, health, discipline, fees, and family communication in one place.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="partners-band">
+    <p class="home-eyebrow">Our partners</p>
+    <div>
+        <span>International Curriculum</span>
+        <span>Cambridge Pathways</span>
+        <span>Ministry Standards</span>
+        <span>Digital School Portal</span>
+    </div>
+</section>
+
+<section class="home-band">
+    <div>
+        <p class="home-eyebrow">Admissions open</p>
+        <h2>Enroll your child in a school shaped by faith, purpose, and academic excellence.</h2>
+    </div>
+    <a href="{% url 'application_add' %}" class="btn btn-success btn-lg">Start Application</a>
+</section>
+
+<section class="public-footer">
+    <div>
+        <h2>Kyabuza Muslim  SecondarySchool</h2>
+        <p>A caring Islamic learning community where children become resilient, respectful, creative, and ready to serve.</p>
+    </div>
+    <div>
+        <h3>Contact</h3>
+        <p>+256 700 000 000<br>info@kyabuza.example.com<br>Kampala, Uganda</p>
+    </div>
+    <div>
+        <h3>Quick Links</h3>
+        <a href="{% url 'application_add' %}">Apply For Admission</a>
+        <a href="{% url 'login' %}">Portal Login</a>
+        <a href="{% url 'dashboard' %}">School Dashboard</a>
+    </div>
+</section>
+{% endblock %}

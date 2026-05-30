@@ -1,0 +1,20 @@
+{% extends 'core/base.html' %}
+{% block title %}{% if form.instance.pk %}Edit Payment{% else %}Record Payment{% endif %} - School Management{% endblock %}
+{% block content %}
+<div class="form-shell">
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <p class="text-uppercase text-success fw-bold mb-1">Finance Office</p>
+            <h1>{% if form.instance.pk %}Edit Payment Reference{% else %}Record Payment Reference{% endif %}</h1>
+            <p class="text-muted mb-0">Use the student payment code plus deposit slip or mobile money reference number.</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="{% url 'payment_list' %}">Back to Payments</a>
+    </div>
+
+    <form method="post" class="section-panel">
+        {% csrf_token %}
+        {% include 'core/_form_fields.html' %}
+        <button type="submit" class="btn btn-success">Save Payment</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends 'core/base.html' %}
+{% block title %}{{ school_class }} - Class Center{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <p class="text-uppercase text-success fw-bold mb-1">Class Center</p>
+        <h1>{{ school_class.class_name }}</h1>
+        <p class="text-muted mb-0">{{ school_class.class_level }} · {{ school_class.status }}</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'class_edit' school_class.pk %}">Edit Class</a>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="section-panel h-100">
+            <h2>Streams</h2>
+            {% for stream in streams %}
+                <div class="record-row"><strong>{{ stream.stream_name }}</strong><span>{{ stream.status }}</span></div>
+            {% empty %}<p class="text-muted">No streams found.</p>{% endfor %}
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="section-panel h-100">
+            <h2>Subjects & Teachers</h2>
+            {% for class_subject in subjects %}
+                <div class="record-row"><strong>{{ class_subject.subject }}</strong><span>{{ class_subject.staff|default:'Not assigned' }}</span></div>
+            {% empty %}<p class="text-muted">No subjects assigned.</p>{% endfor %}
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="section-panel h-100">
+            <h2>Fee Structures</h2>
+            {% for fee in fees %}
+                <div class="record-row"><strong>{{ fee.fee_type }}</strong><span>{{ fee.term }} · {{ fee.amount }}</span></div>
+            {% empty %}<p class="text-muted">No fee structures found.</p>{% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-lg-7">
+        <div class="section-panel">
+            <h2>Enrolled Students</h2>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Student</th><th>Stream</th><th>Year</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for enrollment in enrollments %}
+                            <tr>
+                                <td><a href="{% url 'student_detail' enrollment.student.pk %}">{{ enrollment.student }}</a></td>
+                                <td>{{ enrollment.stream }}</td>
+                                <td>{{ enrollment.year }}</td>
+                                <td>{{ enrollment.status }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="4">No students enrolled.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="section-panel">
+            <h2>Recent Attendance</h2>
+            {% for attendance in attendance_records %}
+                <div class="record-row"><strong>{{ attendance.student }}</strong><span>{{ attendance.attendance_date }} · {{ attendance.status }}</span></div>
+            {% empty %}<p class="text-muted">No attendance records.</p>{% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

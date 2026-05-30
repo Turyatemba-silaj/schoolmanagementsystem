@@ -1,0 +1,102 @@
+{% extends 'core/base.html' %}
+{% block title %}Attendance Marking - School Management{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <p class="text-uppercase text-success fw-bold mb-1">Teacher Attendance</p>
+        <h1>Mark Attendance</h1>
+        <p class="text-muted mb-0">Click P for present, A for absent, S for sick, or X for suspension.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'manage_model_list' 'attendance' %}">Attendance Records</a>
+</div>
+
+<form method="get" class="attendance-filter mb-4">
+    <div>
+        <label for="class_id" class="form-label">Class</label>
+        <select name="class_id" id="class_id" class="form-select" onchange="this.form.submit()">
+            {% for class in classes %}
+                <option value="{{ class.pk }}" {% if selected_class and class.pk == selected_class.pk %}selected{% endif %}>{{ class.class_name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="stream_id" class="form-label">Stream</label>
+        <select name="stream_id" id="stream_id" class="form-select" onchange="this.form.submit()">
+            <option value="">All streams</option>
+            {% for stream in streams %}
+                <option value="{{ stream.pk }}" {% if selected_stream and stream.pk == selected_stream.pk %}selected{% endif %}>{{ stream.stream_name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="date" class="form-label">Date</label>
+        <input type="date" name="date" id="date" value="{{ selected_date }}" class="form-control" onchange="this.form.submit()">
+    </div>
+    <div class="attendance-filter__action">
+        <button type="submit" class="btn btn-success">Load Students</button>
+    </div>
+</form>
+
+<div class="attendance-summary mb-4">
+    <div><span>Present</span><strong>{{ summary.present }}</strong></div>
+    <div><span>Absent</span><strong>{{ summary.absent }}</strong></div>
+    <div><span>Sick</span><strong>{{ summary.sick }}</strong></div>
+    <div><span>Suspension</span><strong>{{ summary.suspended }}</strong></div>
+    <div><span>Unmarked</span><strong>{{ summary.unmarked }}</strong></div>
+</div>
+
+<div class="section-panel">
+    <div class="section-panel__header">
+        <h2>{{ selected_class|default:'No class selected' }}</h2>
+        <span class="text-muted">{{ selected_date }}</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table align-middle attendance-table">
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Admission No</th>
+                    <th>Stream</th>
+                    <th>Current Status</th>
+                    <th class="text-end">Mark</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in attendance_rows %}
+                    <tr>
+                        <td><a href="{% url 'student_detail' row.student.pk %}">{{ row.student }}</a></td>
+                        <td>{{ row.student.admission_no }}</td>
+                        <td>{{ row.stream|default:'-' }}</td>
+                        <td>
+                            {% if row.status_meta %}
+                                <span class="attendance-pill attendance-pill--{{ row.status_meta.class }}">{{ row.status_meta.code }} · {{ row.status_meta.label }}</span>
+                            {% else %}
+                                <span class="attendance-pill attendance-pill--muted">Not marked</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="attendance-actions">
+                                {% for status, option in status_options.items %}
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="class_id" value="{{ selected_class.pk }}">
+                                        <input type="hidden" name="stream_id" value="{% if selected_stream %}{{ selected_stream.pk }}{% endif %}">
+                                        <input type="hidden" name="attendance_date" value="{{ selected_date }}">
+                                        <input type="hidden" name="student_id" value="{{ row.student.pk }}">
+                                        <input type="hidden" name="status" value="{{ status }}">
+                                        <button type="submit" class="attendance-button attendance-button--{{ option.class }} {% if row.status == status %}is-active{% endif %}" title="{{ option.label }}">
+                                            {{ option.code }}
+                                        </button>
+                                    </form>
+                                {% endfor %}
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5" class="text-muted">No enrolled students found for this class or stream.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

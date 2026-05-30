@@ -1,0 +1,31 @@
+{% extends 'core/base.html' %}
+{% block title %}Applications - School Management{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Online Applications</h1>
+    <a class="btn btn-success" href="{% url 'application_add' %}">Add Application</a>
+</div>
+<div class="table-responsive">
+<table class="table table-striped">
+    <thead>
+        <tr><th>Application No</th><th>Applicant</th><th>Applied Class</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+        {% for application in applications %}
+            <tr>
+                <td>{{ application.application_no }}</td>
+                <td>{{ application.applicant_name }}</td>
+                <td>{{ application.applied_class }}</td>
+                <td>{{ application.status }}</td>
+                <td>
+                    <a class="btn btn-sm btn-outline-success" href="{% url 'application_detail' application.pk %}">Review</a>
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'application_edit' application.pk %}">Edit</a>
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="5">No applications found.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

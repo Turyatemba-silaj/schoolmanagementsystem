@@ -1,0 +1,85 @@
+{% extends 'core/base.html' %}
+{% block title %}Student Payment - School Management{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <p class="text-uppercase text-primary fw-bold mb-1">Payee Portal</p>
+        <h1>{{ student }}</h1>
+        <p class="text-muted mb-0">Student No: {{ student.admission_no }}</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'payee_logout' %}">Close Payee Session</a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="metric-card metric-card--light"><span>Expected Fees</span><strong>{{ expected_fees }}</strong></div>
+    </div>
+    <div class="col-md-3">
+        <div class="metric-card metric-card--light"><span>Total Paid</span><strong>{{ total_paid }}</strong></div>
+    </div>
+    <div class="col-md-3">
+        <div class="metric-card metric-card--light"><span>Balance</span><strong>{{ balance }}</strong></div>
+    </div>
+    <div class="col-md-3">
+        <div class="metric-card metric-card--light">
+            <span>Report Card</span>
+            <strong>{% if fees_cleared %}Ready{% else %}Blocked{% endif %}</strong>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <form method="post" class="section-panel">
+            <h2 class="h5 mb-3">Make Payment</h2>
+            {% if fees_structure %}
+                <p class="text-muted">Fee account: {{ fees_structure }}</p>
+            {% else %}
+                <div class="alert alert-warning">No active fee structure was found for this student.</div>
+            {% endif %}
+            {% csrf_token %}
+            {% include 'core/_form_fields.html' %}
+            <button type="submit" class="btn btn-success w-100" {% if not fees_structure %}disabled{% endif %}>Submit Payment</button>
+        </form>
+    </div>
+    <div class="col-lg-7">
+        <section class="section-panel">
+            <h2 class="h5 mb-3">Payment History</h2>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Method</th>
+                            <th>Reference</th>
+                            <th>Paid By</th>
+                            <th>Amount</th>
+                            <th>Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for payment in payments %}
+                            <tr>
+                                <td>{{ payment.payment_date }}</td>
+                                <td>{{ payment.payment_method }}</td>
+                                <td>{{ payment.transaction_id }}</td>
+                                <td>{{ payment.paid_by|default:'-' }}</td>
+                                <td>{{ payment.amount_paid }}</td>
+                                <td>
+                                    {% if payment.balance <= 0 %}
+                                        <span class="attendance-pill attendance-pill--success">Cleared</span>
+                                    {% else %}
+                                        {{ payment.balance }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="6" class="text-muted">No payments have been captured yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}

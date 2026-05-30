@@ -1,0 +1,91 @@
+{% extends 'core/base.html' %}
+{% block title %}Staff Attendance - School Management{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <p class="text-uppercase text-success fw-bold mb-1">Director of Studies</p>
+        <h1>Staff Attendance</h1>
+        <p class="text-muted mb-0">Mark teachers and staff using P, A, S, or X. These records feed payroll generation.</p>
+    </div>
+    <a class="btn btn-success" href="{% url 'payroll_list' %}">Generate Payroll</a>
+</div>
+
+<form method="get" class="attendance-filter mb-4">
+    <div>
+        <label for="department_id" class="form-label">Department</label>
+        <select name="department_id" id="department_id" class="form-select" onchange="this.form.submit()">
+            <option value="">All departments</option>
+            {% for department in departments %}
+                <option value="{{ department.pk }}" {% if selected_department and department.pk == selected_department.pk %}selected{% endif %}>{{ department.department_name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="date" class="form-label">Date</label>
+        <input type="date" name="date" id="date" value="{{ selected_date }}" class="form-control" onchange="this.form.submit()">
+    </div>
+    <div class="attendance-filter__action">
+        <button type="submit" class="btn btn-success">Load Staff</button>
+    </div>
+</form>
+
+<div class="attendance-summary mb-4">
+    <div><span>Present</span><strong>{{ summary.present }}</strong></div>
+    <div><span>Absent</span><strong>{{ summary.absent }}</strong></div>
+    <div><span>Sick</span><strong>{{ summary.sick }}</strong></div>
+    <div><span>Suspension</span><strong>{{ summary.suspended }}</strong></div>
+    <div><span>Unmarked</span><strong>{{ summary.unmarked }}</strong></div>
+</div>
+
+<div class="section-panel">
+    <div class="section-panel__header">
+        <h2>Staff Register</h2>
+        <span class="text-muted">{{ selected_date }}</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table align-middle attendance-table">
+            <thead>
+                <tr>
+                    <th>Staff</th>
+                    <th>Employee Code</th>
+                    <th>Department</th>
+                    <th>Current Status</th>
+                    <th class="text-end">Mark</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in attendance_rows %}
+                    <tr>
+                        <td><a href="{% url 'staff_detail' row.staff.pk %}">{{ row.staff.full_name }}</a></td>
+                        <td>{{ row.staff.employee_code }}</td>
+                        <td>{{ row.staff.department|default:'-' }}</td>
+                        <td>
+                            {% if row.status_meta %}
+                                <span class="attendance-pill attendance-pill--{{ row.status_meta.class }}">{{ row.status_meta.code }} · {{ row.status_meta.label }}</span>
+                            {% else %}
+                                <span class="attendance-pill attendance-pill--muted">Not marked</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="attendance-actions">
+                                {% for status, option in status_options.items %}
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="department_id" value="{% if selected_department %}{{ selected_department.pk }}{% endif %}">
+                                        <input type="hidden" name="attendance_date" value="{{ selected_date }}">
+                                        <input type="hidden" name="staff_id" value="{{ row.staff.pk }}">
+                                        <input type="hidden" name="status" value="{{ status }}">
+                                        <button type="submit" class="attendance-button attendance-button--{{ option.class }} {% if row.status == status %}is-active{% endif %}" title="{{ option.label }}">{{ option.code }}</button>
+                                    </form>
+                                {% endfor %}
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5" class="text-muted">No staff found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

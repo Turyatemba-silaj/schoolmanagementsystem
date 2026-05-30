@@ -1,0 +1,1035 @@
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib import messages
+from django.db.models import Avg, Count, Sum
+from django.forms import modelform_factory
+from django.http import Http404, JsonResponse
+from django.shortcuts import redirect, render
+from django.urls import reverse_lazy
+from django.utils import timezone
+from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
+
+from .forms import (
+    ApplicationForm,
+    BootstrapModelForm,
+    ClassForm,
+    PayeeLoginForm,
+    PayeePaymentForm,
+    PaymentForm,
+    StaffForm,
+    StudentForm,
+)
+from .models import (
+    AcademicYear,
+    Admission,
+    ApplicationDocument,
+    Attendance,
+    BookBorrowing,
+    ClassSubject,
+    Department,
+    DisciplineRecord,
+    Document,
+    Event,
+    EventParticipant,
+    Guardian,
+    FeesStructure,
+    FeeDiscount,
+    HealthRecord,
+    Hostel,
+    HostelAllocation,
+    HostelRoom,
+    Holiday,
+    LibraryBook,
+    OnlineApplication,
+    Payment,
+    Receipt,
+    SchoolClass,
+    Stream,
+    Student,
+    StudentGuardian,
+    Staff,
+    StaffAttendance,
+    Payroll,
+    Enrollment,
+    Subject,
+    SystemSetting,
+    Term,
+    TransportAllocation,
+    TransportRoute,
+    Vehicle,
+    Exam,
+    ExamResult,
+    Leave,
+    Notification,
+)
+
+
+class HomeView(TemplateView):
+    template_name = 'core/home.html'
+
+
+class DashboardView(LoginRequiredMixin, TemplateView):
+    template_name = 'core/dashboard.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['student_count'] = Student.objects.count()
+        context['staff_count'] = Staff.objects.count()
+        context['class_count'] = SchoolClass.objects.count()
+        context['application_count'] = OnlineApplication.objects.count()
+        context['department_count'] = Department.objects.count()
+        context['subject_count'] = Subject.objects.count()
+        context['pending_application_count'] = OnlineApplication.objects.filter(status='pending').count()
+        context['attendance_present_count'] = Attendance.objects.filter(status='present').count()
+        context['attendance_absent_count'] = Attendance.objects.filter(status='absent').count()
+        context['attendance_sick_count'] = Attendance.objects.filter(status='sick').count()
+        context['attendance_suspended_count'] = Attendance.objects.filter(status='suspended').count()
+        context['total_payments'] = Payment.objects.aggregate(total=Sum('amount_paid'))['total'] or 0
+        context['total_balance'] = Payment.objects.aggregate(total=Sum('balance'))['total'] or 0
+        context['average_score'] = ExamResult.objects.aggregate(avg=Avg('marks_obtained'))['avg'] or 0
+        context['recent_students'] = Student.objects.select_related('user').order_by('-created_at')[:5]
+        context['recent_payments'] = Payment.objects.select_related('student', 'fees_structure').order_by('-payment_date')[:5]
+        context['upcoming_events'] = Event.objects.order_by('start_date')[:5]
+        context['class_overview'] = SchoolClass.objects.annotate(
+            enrollment_count=Count('enrollment'),
+            subject_count=Count('classsubject', distinct=True),
+            fee_count=Count('feesstructure', distinct=True),
+        ).order_by('class_level', 'class_name')
+        application_statuses = OnlineApplication.objects.values('status').annotate(total=Count('id')).order_by('status')
+        context['dashboard_charts'] = {
+            'overview': {
+                'labels': ['Students', 'Staff', 'Classes', 'Applications'],
+                'values': [
+                    context['student_count'],
+                    context['staff_count'],
+                    context['class_count'],
+                    context['application_count'],
+                ],
+            },
+            'attendance': {
+                'labels': ['Present', 'Absent', 'Sick', 'Suspended'],
+                'values': [
+                    context['attendance_present_count'],
+                    context['attendance_absent_count'],
+                    context['attendance_sick_count'],
+                    context['attendance_suspended_count'],
+                ],
+            },
+            'finance': {
+                'labels': ['Paid', 'Balance'],
+                'values': [float(context['total_payments']), float(context['total_balance'])],
+            },
+            'applications': {
+                'labels': [row['status'].title() for row in application_statuses],
+                'values': [row['total'] for row in application_statuses],
+            },
+            'classes': {
+                'labels': [school_class.class_name for school_class in context['class_overview']],
+                'values': [school_class.enrollment_count for school_class in context['class_overview']],
+            },
+        }
+        return context
+
+
+class StudentListView(LoginRequiredMixin, ListView):
+    model = Student
+    template_name = 'core/student_list.html'
+    context_object_name = 'students'
+
+    def get_queryset(self):
+        return Student.objects.select_related('user').prefetch_related(
+            'enrollments__school_class',
+            'enrollments__stream',
+        )
+
+
+class StudentDetailView(LoginRequiredMixin, DetailView):
+    model = Student
+    template_name = 'core/student_detail.html'
+    context_object_name = 'student'
+
+    def get_queryset(self):
+        return Student.objects.select_related('user').prefetch_related(
+            'guardian_links__guardian',
+            'enrollments__school_class',
+            'enrollments__stream',
+            'enrollments__year',
+            'documents',
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        student = self.object
+        context['guardians'] = StudentGuardian.objects.select_related('guardian').filter(student=student)
+        context['enrollments'] = Enrollment.objects.select_related('school_class', 'stream', 'year').filter(student=student)
+        context['attendance_records'] = Attendance.objects.select_related('school_class', 'stream').filter(student=student).order_by('-attendance_date')[:10]
+        context['exam_results'] = ExamResult.objects.select_related('exam', 'subject').filter(student=student).order_by('-exam__exam_date')[:10]
+        context['payments'] = Payment.objects.select_related('fees_structure').filter(student=student).order_by('-payment_date')[:10]
+        context['documents'] = Document.objects.filter(student=student).order_by('-uploaded_at')[:10]
+        context['borrowings'] = BookBorrowing.objects.select_related('book').filter(student=student).order_by('-issue_date')[:10]
+        context['hostel_allocations'] = HostelAllocation.objects.select_related('room', 'room__hostel').filter(student=student).order_by('-allocation_date')[:5]
+        context['transport_allocations'] = TransportAllocation.objects.select_related('vehicle').filter(student=student).order_by('-allocation_date')[:5]
+        context['health_records'] = HealthRecord.objects.filter(student=student).order_by('-record_date')[:5]
+        context['discipline_records'] = DisciplineRecord.objects.select_related('recorded_by').filter(student=student).order_by('-record_date')[:5]
+        context['fee_total_paid'] = Payment.objects.filter(student=student).aggregate(total=Sum('amount_paid'))['total'] or 0
+        context['fee_total_balance'] = Payment.objects.filter(student=student).aggregate(total=Sum('balance'))['total'] or 0
+        return context
+
+
+class StudentCreateView(LoginRequiredMixin, CreateView):
+    model = Student
+    form_class = StudentForm
+    template_name = 'core/student_form.html'
+    success_url = reverse_lazy('student_list')
+
+
+class StudentUpdateView(LoginRequiredMixin, UpdateView):
+    model = Student
+    form_class = StudentForm
+    template_name = 'core/student_form.html'
+    success_url = reverse_lazy('student_list')
+
+
+class StaffListView(LoginRequiredMixin, ListView):
+    model = Staff
+    template_name = 'core/staff_list.html'
+    context_object_name = 'staff_members'
+
+
+class StaffDetailView(LoginRequiredMixin, DetailView):
+    model = Staff
+    template_name = 'core/staff_detail.html'
+    context_object_name = 'staff'
+
+    def get_queryset(self):
+        return Staff.objects.select_related('user', 'department')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        staff = self.object
+        context['class_subjects'] = ClassSubject.objects.select_related('school_class', 'subject').filter(staff=staff)
+        context['approved_admissions'] = Admission.objects.select_related('student', 'application').filter(approved_by=staff).order_by('-admission_date')[:10]
+        context['leave_records'] = Leave.objects.filter(staff=staff).order_by('-applied_on')[:10]
+        context['discipline_records'] = DisciplineRecord.objects.select_related('student').filter(recorded_by=staff).order_by('-record_date')[:10]
+        context['attendance_records'] = StaffAttendance.objects.select_related('marked_by').filter(staff=staff).order_by('-attendance_date')[:10]
+        context['payroll_records'] = Payroll.objects.filter(staff=staff).order_by('-year', '-month')[:10]
+        return context
+
+
+class StaffCreateView(LoginRequiredMixin, CreateView):
+    model = Staff
+    form_class = StaffForm
+    template_name = 'core/staff_form.html'
+    success_url = reverse_lazy('staff_list')
+
+
+class StaffUpdateView(LoginRequiredMixin, UpdateView):
+    model = Staff
+    form_class = StaffForm
+    template_name = 'core/staff_form.html'
+    success_url = reverse_lazy('staff_list')
+
+
+class ClassListView(LoginRequiredMixin, ListView):
+    model = SchoolClass
+    template_name = 'core/class_list.html'
+    context_object_name = 'classes'
+
+    def get_queryset(self):
+        return SchoolClass.objects.annotate(
+            enrollment_count=Count('enrollment'),
+            stream_count=Count('streams', distinct=True),
+            subject_count=Count('classsubject', distinct=True),
+        ).order_by('class_level', 'class_name')
+
+
+class ClassDetailView(LoginRequiredMixin, DetailView):
+    model = SchoolClass
+    template_name = 'core/class_detail.html'
+    context_object_name = 'school_class'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        school_class = self.object
+        context['streams'] = Stream.objects.filter(school_class=school_class)
+        context['subjects'] = ClassSubject.objects.select_related('subject', 'staff').filter(school_class=school_class)
+        context['enrollments'] = Enrollment.objects.select_related('student', 'stream', 'year').filter(school_class=school_class)
+        context['fees'] = FeesStructure.objects.select_related('term').filter(school_class=school_class)
+        context['attendance_records'] = Attendance.objects.select_related('student', 'stream').filter(school_class=school_class).order_by('-attendance_date')[:10]
+        return context
+
+
+class ClassCreateView(LoginRequiredMixin, CreateView):
+    model = SchoolClass
+    form_class = ClassForm
+    template_name = 'core/class_form.html'
+    success_url = reverse_lazy('class_list')
+
+
+class ClassUpdateView(LoginRequiredMixin, UpdateView):
+    model = SchoolClass
+    form_class = ClassForm
+    template_name = 'core/class_form.html'
+    success_url = reverse_lazy('class_list')
+
+
+class ApplicationListView(LoginRequiredMixin, ListView):
+    model = OnlineApplication
+    template_name = 'core/application_list.html'
+    context_object_name = 'applications'
+
+    def get_queryset(self):
+        return OnlineApplication.objects.select_related('applied_class').order_by('-application_date')
+
+
+class ApplicationDetailView(LoginRequiredMixin, DetailView):
+    model = OnlineApplication
+    template_name = 'core/application_detail.html'
+    context_object_name = 'application'
+
+    def get_queryset(self):
+        return OnlineApplication.objects.select_related('applied_class')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        application = self.object
+        context['documents'] = ApplicationDocument.objects.filter(application=application).order_by('-uploaded_at')
+        context['admissions'] = Admission.objects.select_related('student', 'approved_by').filter(application=application).order_by('-admission_date')
+        return context
+
+
+class ApplicationCreateView(LoginRequiredMixin, CreateView):
+    model = OnlineApplication
+    form_class = ApplicationForm
+    template_name = 'core/application_form.html'
+    success_url = reverse_lazy('application_list')
+
+
+class ApplicationUpdateView(LoginRequiredMixin, UpdateView):
+    model = OnlineApplication
+    form_class = ApplicationForm
+    template_name = 'core/application_form.html'
+    success_url = reverse_lazy('application_list')
+
+
+def latest_payment_for_student(student):
+    return Payment.objects.select_related(
+        'fees_structure',
+        'fees_structure__school_class',
+        'receipted_by',
+    ).filter(student=student).order_by('-payment_date', '-id').first()
+
+
+def current_fee_structure_for_student(student):
+    enrollment = Enrollment.objects.filter(student=student).order_by('-enrollment_date', '-id').first()
+    if not enrollment:
+        return None
+    return FeesStructure.objects.filter(school_class=enrollment.school_class).order_by('-created_at', '-id').first()
+
+
+def payment_summary_for_student(student):
+    fees_structure = current_fee_structure_for_student(student)
+    payments = Payment.objects.select_related('fees_structure').filter(student=student)
+    if fees_structure:
+        payments = payments.filter(fees_structure=fees_structure)
+    payments = payments.order_by('-payment_date', '-id')
+    latest_payment = payments.first()
+    total_paid = payments.aggregate(total=Sum('amount_paid'))['total'] or 0
+    expected_fees = fees_structure.amount if fees_structure else 0
+    balance = latest_payment.balance if latest_payment else expected_fees
+    return {
+        'fees_structure': fees_structure,
+        'payments': payments,
+        'latest_payment': latest_payment,
+        'expected_fees': expected_fees,
+        'total_paid': total_paid,
+        'balance': balance,
+        'fees_cleared': bool(fees_structure and balance <= 0),
+    }
+
+
+def guardians_for_student(student):
+    return StudentGuardian.objects.select_related('guardian').filter(student=student)
+
+
+def create_fee_reminder(student, request=None):
+    payment = latest_payment_for_student(student)
+    balance = payment.balance if payment else 0
+    guardian_names = ', '.join(link.guardian.full_name for link in guardians_for_student(student)) or 'Guardian'
+    message = (
+        f'Dear {guardian_names}, please clear the outstanding school fees balance '
+        f'of {balance} for {student} ({student.admission_no}) on time.'
+    )
+    Notification.objects.create(
+        user=student.user,
+        title='School fees payment reminder',
+        message=message,
+    )
+    if request:
+        messages.success(request, f'Reminder created for {student}.')
+
+
+class PaymentListView(LoginRequiredMixin, ListView):
+    model = Payment
+    template_name = 'core/payment_list.html'
+    context_object_name = 'payments'
+
+    def get_queryset(self):
+        return Payment.objects.select_related(
+            'student',
+            'fees_structure',
+            'fees_structure__school_class',
+            'receipted_by',
+        ).order_by('-payment_date', '-id')
+
+    def post(self, request, *args, **kwargs):
+        student = Student.objects.filter(pk=request.POST.get('student_id')).first()
+        if student:
+            create_fee_reminder(student, request)
+        else:
+            messages.error(request, 'Could not create reminder because the student was not found.')
+        return redirect('payment_list')
+
+
+class PaymentCreateView(LoginRequiredMixin, CreateView):
+    model = Payment
+    form_class = PaymentForm
+    template_name = 'core/payment_form.html'
+    success_url = reverse_lazy('payment_list')
+
+
+class PaymentUpdateView(LoginRequiredMixin, UpdateView):
+    model = Payment
+    form_class = PaymentForm
+    template_name = 'core/payment_form.html'
+    success_url = reverse_lazy('payment_list')
+
+
+def payee_login(request):
+    if request.method == 'POST':
+        form = PayeeLoginForm(request.POST)
+        if form.is_valid():
+            student = form.cleaned_data['student_number']
+            request.session['payee_student_id'] = student.pk
+            messages.success(request, f'Welcome. Payments are now linked to {student.admission_no}.')
+            return redirect('payee_payments')
+    else:
+        form = PayeeLoginForm()
+    return render(request, 'core/payee_login.html', {'form': form})
+
+
+def payee_logout(request):
+    request.session.pop('payee_student_id', None)
+    messages.success(request, 'Payee session closed.')
+    return redirect('home')
+
+
+def payee_payments(request):
+    student_id = request.session.get('payee_student_id')
+    student = Student.objects.filter(pk=student_id).first()
+    if not student:
+        messages.error(request, 'Enter the student number before making a payment.')
+        return redirect('payee_login')
+
+    summary = payment_summary_for_student(student)
+    if request.method == 'POST':
+        form = PayeePaymentForm(request.POST)
+        if form.is_valid():
+            if not summary['fees_structure']:
+                messages.error(request, 'This student has no active fee structure, so payment cannot be captured automatically.')
+                return redirect('payee_payments')
+
+            Payment.objects.create(
+                student=student,
+                fees_structure=summary['fees_structure'],
+                payment_date=timezone.localdate(),
+                amount_paid=form.cleaned_data['amount_paid'],
+                payment_method=form.cleaned_data['payment_method'],
+                transaction_id=form.cleaned_data['payment_reference_number'].strip(),
+                paid_by=form.cleaned_data['paid_by'].strip(),
+            )
+            updated_summary = payment_summary_for_student(student)
+            if updated_summary['fees_cleared']:
+                messages.success(request, 'Payment captured. Fees are cleared and the report card is ready for authorized staff printing.')
+            else:
+                messages.success(request, f'Payment captured automatically. Current balance is {updated_summary["balance"]}.')
+            return redirect('payee_payments')
+    else:
+        form = PayeePaymentForm()
+
+    context = {
+        'student': student,
+        'form': form,
+        **summary,
+    }
+    return render(request, 'core/payee_payments.html', context)
+
+
+class ExamResultListView(LoginRequiredMixin, ListView):
+    model = ExamResult
+    template_name = 'core/exam_result_list.html'
+    context_object_name = 'exam_results'
+
+    def get_queryset(self):
+        return ExamResult.objects.select_related('exam', 'student', 'subject').order_by('-exam__exam_date', 'student__first_name')
+
+    def post(self, request, *args, **kwargs):
+        student = Student.objects.filter(pk=request.POST.get('student_id')).first()
+        if student:
+            create_fee_reminder(student, request)
+        else:
+            messages.error(request, 'Could not create reminder because the student was not found.')
+        return redirect('exam_result_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        exam_results = list(context['exam_results'])
+        student_ids = [result.student_id for result in exam_results]
+        latest_payments = {}
+        for payment in Payment.objects.select_related('fees_structure', 'fees_structure__school_class').filter(student_id__in=student_ids).order_by('student_id', '-payment_date', '-id'):
+            latest_payments.setdefault(payment.student_id, payment)
+        context['exam_rows'] = [
+            {
+                'result': result,
+                'payment': latest_payments.get(result.student_id),
+                'is_cleared': bool(latest_payments.get(result.student_id) and latest_payments[result.student_id].balance <= 0),
+            }
+            for result in exam_results
+        ]
+        return context
+
+
+class ReportCardIndexView(LoginRequiredMixin, ListView):
+    model = Student
+    template_name = 'core/report_card_index.html'
+    context_object_name = 'students'
+
+    def get_queryset(self):
+        return Student.objects.select_related('user').prefetch_related('enrollments__school_class', 'enrollments__stream').order_by('first_name', 'last_name')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        students = list(context['students'])
+        student_ids = [student.id for student in students]
+        result_counts = ExamResult.objects.filter(student_id__in=student_ids).values('student_id').annotate(total=Count('id'))
+        result_count_map = {row['student_id']: row['total'] for row in result_counts}
+        latest_payments = {}
+        for payment in Payment.objects.filter(student_id__in=student_ids).order_by('student_id', '-payment_date', '-id'):
+            latest_payments.setdefault(payment.student_id, payment)
+        context['student_rows'] = []
+        for student in students:
+            enrollment = student.enrollments.all()[0] if student.enrollments.all() else None
+            payment = latest_payments.get(student.id)
+            context['student_rows'].append({
+                'student': student,
+                'enrollment': enrollment,
+                'result_count': result_count_map.get(student.id, 0),
+                'latest_payment': payment,
+                'fees_cleared': bool(payment and payment.balance <= 0),
+            })
+        return context
+
+
+class ReportCardDetailView(LoginRequiredMixin, DetailView):
+    model = Student
+    template_name = 'core/report_card_detail.html'
+    context_object_name = 'student'
+
+    def get_queryset(self):
+        return Student.objects.select_related('user').prefetch_related(
+            'guardian_links__guardian',
+            'enrollments__school_class',
+            'enrollments__stream',
+            'enrollments__year',
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        student = self.object
+        latest_payment = latest_payment_for_student(student)
+        fees_cleared = bool(latest_payment and latest_payment.balance <= 0)
+        if not fees_cleared:
+            context.update({
+                'latest_payment': latest_payment,
+                'fees_cleared': False,
+                'generated_on': timezone.localdate(),
+            })
+            return context
+
+        exam_results = ExamResult.objects.select_related('exam', 'subject').filter(student=student).order_by('subject__subject_name', '-exam__exam_date')
+        total_marks = exam_results.aggregate(total=Sum('marks_obtained'))['total'] or 0
+        average_mark = exam_results.aggregate(avg=Avg('marks_obtained'))['avg'] or 0
+        attendance = Attendance.objects.filter(student=student)
+
+        context.update({
+            'guardians': StudentGuardian.objects.select_related('guardian').filter(student=student),
+            'enrollment': Enrollment.objects.select_related('school_class', 'stream', 'year').filter(student=student).order_by('-enrollment_date').first(),
+            'exam_results': exam_results,
+            'total_marks': total_marks,
+            'average_mark': average_mark,
+            'attendance_present': attendance.filter(status='present').count(),
+            'attendance_absent': attendance.filter(status='absent').count(),
+            'attendance_sick': attendance.filter(status='sick').count(),
+            'attendance_suspended': attendance.filter(status='suspended').count(),
+            'latest_payment': latest_payment,
+            'fees_cleared': fees_cleared,
+            'generated_on': timezone.localdate(),
+        })
+        return context
+
+
+ATTENDANCE_STATUS_OPTIONS = {
+    'present': {'code': 'P', 'label': 'Present', 'class': 'success'},
+    'absent': {'code': 'A', 'label': 'Absent', 'class': 'danger'},
+    'sick': {'code': 'S', 'label': 'Sick', 'class': 'warning'},
+    'suspended': {'code': 'X', 'label': 'Suspension', 'class': 'dark'},
+}
+
+
+STAFF_ATTENDANCE_STATUS_OPTIONS = {
+    'present': {'code': 'P', 'label': 'Present', 'class': 'success'},
+    'absent': {'code': 'A', 'label': 'Absent', 'class': 'danger'},
+    'sick': {'code': 'S', 'label': 'Sick', 'class': 'warning'},
+    'suspended': {'code': 'X', 'label': 'Suspension', 'class': 'dark'},
+}
+
+
+def get_current_staff(user):
+    return Staff.objects.filter(user=user).first()
+
+
+@login_required
+def attendance_marking(request):
+    selected_date = request.POST.get('attendance_date') or request.GET.get('date') or timezone.localdate().isoformat()
+    selected_class_id = request.POST.get('class_id') or request.GET.get('class_id')
+    selected_stream_id = request.POST.get('stream_id') or request.GET.get('stream_id')
+
+    selected_class = None
+    selected_stream = None
+    classes = SchoolClass.objects.order_by('class_level', 'class_name')
+
+    if selected_class_id:
+        selected_class = SchoolClass.objects.filter(pk=selected_class_id).first()
+    if selected_class is None:
+        selected_class = classes.first()
+        selected_class_id = selected_class.pk if selected_class else None
+
+    streams = Stream.objects.filter(school_class=selected_class).order_by('stream_name') if selected_class else Stream.objects.none()
+    if selected_stream_id:
+        selected_stream = streams.filter(pk=selected_stream_id).first()
+
+    if request.method == 'POST':
+        student = Student.objects.filter(pk=request.POST.get('student_id')).first()
+        status = request.POST.get('status')
+        if not selected_class or not student or status not in ATTENDANCE_STATUS_OPTIONS:
+            messages.error(request, 'Attendance could not be saved. Please choose a class and valid student status.')
+        else:
+            enrollment = Enrollment.objects.select_related('stream').filter(
+                student=student,
+                school_class=selected_class,
+            ).first()
+            record_stream = selected_stream or (enrollment.stream if enrollment else None)
+            attendance = Attendance.objects.filter(
+                student=student,
+                school_class=selected_class,
+                attendance_date=selected_date,
+            )
+            if selected_stream:
+                attendance = attendance.filter(stream=selected_stream)
+            record = attendance.first()
+            if record is None:
+                record = Attendance(
+                    student=student,
+                    school_class=selected_class,
+                    stream=record_stream,
+                    attendance_date=selected_date,
+                )
+            record.status = status
+            record.stream = record.stream or record_stream
+            record.save()
+            messages.success(request, f'{student} marked {ATTENDANCE_STATUS_OPTIONS[status]["label"]}.')
+
+        redirect_url = f'{reverse_lazy("attendance_marking")}?class_id={selected_class_id}&date={selected_date}'
+        if selected_stream_id:
+            redirect_url += f'&stream_id={selected_stream_id}'
+        return redirect(redirect_url)
+
+    enrollment_queryset = Enrollment.objects.select_related('student', 'stream').filter(school_class=selected_class) if selected_class else Enrollment.objects.none()
+    if selected_stream:
+        enrollment_queryset = enrollment_queryset.filter(stream=selected_stream)
+
+    attendance_records = {
+        record.student_id: record
+        for record in Attendance.objects.filter(
+            school_class=selected_class,
+            attendance_date=selected_date,
+            student_id__in=enrollment_queryset.values_list('student_id', flat=True),
+        )
+    } if selected_class else {}
+
+    rows = []
+    for enrollment in enrollment_queryset.order_by('student__first_name', 'student__last_name'):
+        record = attendance_records.get(enrollment.student_id)
+        status = record.status if record else ''
+        rows.append({
+            'student': enrollment.student,
+            'stream': enrollment.stream,
+            'status': status,
+            'status_meta': ATTENDANCE_STATUS_OPTIONS.get(status),
+        })
+
+    summary = {
+        key: sum(1 for row in rows if row['status'] == key)
+        for key in ATTENDANCE_STATUS_OPTIONS
+    }
+    summary['unmarked'] = sum(1 for row in rows if not row['status'])
+
+    return render(request, 'core/attendance_marking.html', {
+        'classes': classes,
+        'streams': streams,
+        'selected_class': selected_class,
+        'selected_stream': selected_stream,
+        'selected_date': selected_date,
+        'attendance_rows': rows,
+        'status_options': ATTENDANCE_STATUS_OPTIONS,
+        'summary': summary,
+    })
+
+
+@login_required
+def staff_attendance_marking(request):
+    selected_date = request.POST.get('attendance_date') or request.GET.get('date') or timezone.localdate().isoformat()
+    department_id = request.POST.get('department_id') or request.GET.get('department_id')
+    selected_department = Department.objects.filter(pk=department_id).first() if department_id else None
+    staff_queryset = Staff.objects.select_related('department').order_by('full_name')
+    if selected_department:
+        staff_queryset = staff_queryset.filter(department=selected_department)
+
+    marker = get_current_staff(request.user)
+
+    if request.method == 'POST':
+        staff = Staff.objects.filter(pk=request.POST.get('staff_id')).first()
+        status = request.POST.get('status')
+        if not staff or status not in STAFF_ATTENDANCE_STATUS_OPTIONS:
+            messages.error(request, 'Staff attendance could not be saved. Please choose a valid staff member and status.')
+        else:
+            record, _ = StaffAttendance.objects.get_or_create(
+                staff=staff,
+                attendance_date=selected_date,
+                defaults={'marked_by': marker},
+            )
+            record.status = status
+            record.marked_by = marker
+            record.save()
+            messages.success(request, f'{staff.full_name} marked {STAFF_ATTENDANCE_STATUS_OPTIONS[status]["label"]}.')
+
+        redirect_url = f'{reverse_lazy("staff_attendance_marking")}?date={selected_date}'
+        if department_id:
+            redirect_url += f'&department_id={department_id}'
+        return redirect(redirect_url)
+
+    records = {
+        record.staff_id: record
+        for record in StaffAttendance.objects.filter(
+            attendance_date=selected_date,
+            staff_id__in=staff_queryset.values_list('id', flat=True),
+        )
+    }
+    rows = []
+    for staff in staff_queryset:
+        record = records.get(staff.id)
+        status = record.status if record else ''
+        rows.append({
+            'staff': staff,
+            'status': status,
+            'status_meta': STAFF_ATTENDANCE_STATUS_OPTIONS.get(status),
+        })
+
+    summary = {
+        key: sum(1 for row in rows if row['status'] == key)
+        for key in STAFF_ATTENDANCE_STATUS_OPTIONS
+    }
+    summary['unmarked'] = sum(1 for row in rows if not row['status'])
+
+    return render(request, 'core/staff_attendance_marking.html', {
+        'departments': Department.objects.order_by('department_name'),
+        'selected_department': selected_department,
+        'selected_date': selected_date,
+        'attendance_rows': rows,
+        'status_options': STAFF_ATTENDANCE_STATUS_OPTIONS,
+        'summary': summary,
+    })
+
+
+@login_required
+def payroll_list(request):
+    today = timezone.localdate()
+    month = int(request.POST.get('month') or request.GET.get('month') or today.month)
+    year = int(request.POST.get('year') or request.GET.get('year') or today.year)
+    generator = get_current_staff(request.user)
+
+    if request.method == 'POST':
+        for staff in Staff.objects.order_by('full_name'):
+            records = StaffAttendance.objects.filter(
+                staff=staff,
+                attendance_date__year=year,
+                attendance_date__month=month,
+            )
+            present_days = records.filter(status='present').count()
+            sick_days = records.filter(status='sick').count()
+            absent_days = records.filter(status='absent').count()
+            suspension_days = records.filter(status='suspended').count()
+            working_days = present_days + sick_days + absent_days + suspension_days
+            payable_days = present_days + sick_days
+            base_salary = staff.base_salary or 0
+            if working_days:
+                net_salary = base_salary * payable_days / working_days
+            else:
+                net_salary = 0
+            deductions = base_salary - net_salary
+            Payroll.objects.update_or_create(
+                staff=staff,
+                month=month,
+                year=year,
+                defaults={
+                    'base_salary': base_salary,
+                    'present_days': present_days,
+                    'sick_days': sick_days,
+                    'absent_days': absent_days,
+                    'suspension_days': suspension_days,
+                    'working_days': working_days,
+                    'payable_days': payable_days,
+                    'deductions': deductions,
+                    'net_salary': net_salary,
+                    'generated_by': generator,
+                    'generated_at': timezone.now(),
+                    'status': 'generated',
+                },
+            )
+        messages.success(request, f'Payroll generated for {month}/{year}.')
+        return redirect(f'{reverse_lazy("payroll_list")}?month={month}&year={year}')
+
+    payrolls = Payroll.objects.select_related('staff', 'staff__department').filter(month=month, year=year)
+    totals = payrolls.aggregate(
+        base=Sum('base_salary'),
+        deductions=Sum('deductions'),
+        net=Sum('net_salary'),
+    )
+    return render(request, 'core/payroll_list.html', {
+        'month': month,
+        'year': year,
+        'payrolls': payrolls.order_by('staff__full_name'),
+        'totals': totals,
+    })
+
+
+@login_required
+def students_json(request):
+    students = list(
+        Student.objects.values(
+            'id',
+            'admission_no',
+            'first_name',
+            'last_name',
+            'gender',
+            'status',
+        )
+    )
+    return JsonResponse({'students': students})
+
+
+@login_required
+def staff_json(request):
+    staff_members = list(
+        Staff.objects.values(
+            'id',
+            'employee_code',
+            'full_name',
+            'designation',
+            'status',
+        )
+    )
+    return JsonResponse({'staff': staff_members})
+
+
+MANAGED_MODELS = {
+    'departments': Department,
+    'staff': Staff,
+    'staff-attendance': StaffAttendance,
+    'payroll': Payroll,
+    'guardians': Guardian,
+    'students': Student,
+    'student-guardians': StudentGuardian,
+    'academic-years': AcademicYear,
+    'terms': Term,
+    'classes': SchoolClass,
+    'streams': Stream,
+    'enrollments': Enrollment,
+    'attendance': Attendance,
+    'subjects': Subject,
+    'class-subjects': ClassSubject,
+    'exams': Exam,
+    'exam-results': ExamResult,
+    'fees-structures': FeesStructure,
+    'fee-discounts': FeeDiscount,
+    'payments': Payment,
+    'receipts': Receipt,
+    'library-books': LibraryBook,
+    'book-borrowings': BookBorrowing,
+    'hostels': Hostel,
+    'hostel-rooms': HostelRoom,
+    'hostel-allocations': HostelAllocation,
+    'transport-routes': TransportRoute,
+    'vehicles': Vehicle,
+    'transport-allocations': TransportAllocation,
+    'online-applications': OnlineApplication,
+    'application-documents': ApplicationDocument,
+    'admissions': Admission,
+    'documents': Document,
+    'events': Event,
+    'event-participants': EventParticipant,
+    'health-records': HealthRecord,
+    'discipline-records': DisciplineRecord,
+    'leaves': Leave,
+    'notifications': Notification,
+    'holidays': Holiday,
+    'system-settings': SystemSetting,
+}
+
+
+MANAGED_GROUPS = [
+    {
+        'name': 'People',
+        'description': 'Users, staff, students, guardians, and family links.',
+        'models': ['students', 'staff', 'staff-attendance', 'payroll', 'guardians', 'student-guardians', 'notifications'],
+    },
+    {
+        'name': 'Academics',
+        'description': 'Academic years, classes, streams, subjects, exams, and results.',
+        'models': ['academic-years', 'terms', 'classes', 'streams', 'enrollments', 'attendance', 'subjects', 'class-subjects', 'exams', 'exam-results'],
+    },
+    {
+        'name': 'Finance',
+        'description': 'Fee structures, discounts, payments, and receipts.',
+        'models': ['fees-structures', 'fee-discounts', 'payments', 'receipts'],
+    },
+    {
+        'name': 'Admissions',
+        'description': 'Online applications, uploaded application documents, and admissions.',
+        'models': ['online-applications', 'application-documents', 'admissions'],
+    },
+    {
+        'name': 'Student Services',
+        'description': 'Library, hostel, transport, health, discipline, events, and documents.',
+        'models': ['library-books', 'book-borrowings', 'hostels', 'hostel-rooms', 'hostel-allocations', 'transport-routes', 'vehicles', 'transport-allocations', 'documents', 'events', 'event-participants', 'health-records', 'discipline-records', 'leaves', 'holidays'],
+    },
+    {
+        'name': 'Administration',
+        'description': 'Departments and system settings.',
+        'models': ['departments', 'system-settings'],
+    },
+]
+
+
+def get_managed_model(model_name):
+    try:
+        return MANAGED_MODELS[model_name]
+    except KeyError:
+        raise Http404('Managed model not found')
+
+
+class ManageIndexView(LoginRequiredMixin, TemplateView):
+    template_name = 'core/manage_index.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['managed_groups'] = []
+        for group in MANAGED_GROUPS:
+            context['managed_groups'].append({
+                'name': group['name'],
+                'description': group['description'],
+                'models': [
+                    {
+                        'slug': slug,
+                        'name': MANAGED_MODELS[slug]._meta.verbose_name_plural.title(),
+                        'count': MANAGED_MODELS[slug].objects.count(),
+                    }
+                    for slug in group['models']
+                ],
+            })
+        return context
+
+
+class ManagedListView(LoginRequiredMixin, ListView):
+    template_name = 'core/manage_list.html'
+    context_object_name = 'objects'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.model_name = kwargs['model_name']
+        self.model = get_managed_model(self.model_name)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        return self.model.objects.all()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['model_name'] = self.model._meta.verbose_name.title()
+        context['model_name_plural'] = self.model._meta.verbose_name_plural.title()
+        context['add_url_name'] = 'manage_model_add'
+        context['edit_url_name'] = 'manage_model_edit'
+        context['model_name_slug'] = self.model_name
+        return context
+
+
+class ManagedCreateView(LoginRequiredMixin, CreateView):
+    template_name = 'core/manage_form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.model_name = kwargs['model_name']
+        self.model = get_managed_model(self.model_name)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_class(self):
+        return modelform_factory(
+            self.model,
+            form=BootstrapModelForm,
+            exclude=['created_at', 'updated_at'],
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['model_name'] = self.model._meta.verbose_name.title()
+        context['model_name_plural'] = self.model._meta.verbose_name_plural.title()
+        return context
+
+    def get_success_url(self):
+        return reverse_lazy('manage_model_list', kwargs={'model_name': self.model_name})
+
+
+class ManagedUpdateView(LoginRequiredMixin, UpdateView):
+    template_name = 'core/manage_form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.model_name = kwargs['model_name']
+        self.model = get_managed_model(self.model_name)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        return self.model.objects.all()
+
+    def get_form_class(self):
+        return modelform_factory(
+            self.model,
+            form=BootstrapModelForm,
+            exclude=['created_at', 'updated_at'],
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['model_name'] = self.model._meta.verbose_name.title()
+        context['model_name_plural'] = self.model._meta.verbose_name_plural.title()
+        return context
+
+    def get_success_url(self):
+        return reverse_lazy('manage_model_list', kwargs={'model_name': self.model_name})

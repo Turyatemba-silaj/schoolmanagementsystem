@@ -1,0 +1,17 @@
+{% extends 'core/base.html' %}
+{% block title %}Pay Fees - School Management{% endblock %}
+{% block content %}
+<div class="payee-shell">
+    <section class="payee-card">
+        <p class="text-uppercase text-primary fw-bold mb-1">Payee Portal</p>
+        <h1>Student Fee Payment</h1>
+        <p class="text-muted">Enter the student number to open the payment page. Payments are attached automatically to the student's fee account.</p>
+
+        <form method="post">
+            {% csrf_token %}
+            {% include 'core/_form_fields.html' %}
+            <button type="submit" class="btn btn-primary w-100">Continue to Payment</button>
+        </form>
+    </section>
+</div>
+{% endblock %}
