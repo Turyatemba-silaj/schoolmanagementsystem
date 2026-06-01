@@ -1,17 +1,28 @@
 {% extends 'core/base.html' %}
 {% block title %}Login - School Management{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <h1>Login</h1>
-        <form method="post" novalidate>
+<section class="auth-page">
+    <div class="auth-card">
+        <div class="auth-card__header">
+            <span class="auth-card__mark">KM</span>
+            <div>
+                <p class="text-uppercase text-success fw-bold mb-1">Secure Access</p>
+                <h1>Sign in to your account</h1>
+                <p class="text-muted mb-0">Access student records, finance, attendance, payroll, and academic reports.</p>
+            </div>
+        </div>
+        <form method="post" novalidate class="auth-form">
             {% csrf_token %}
             {% if form.errors %}
-                <div class="alert alert-danger">Please correct the error below.</div>
+                <div class="alert alert-danger">Please check your username and password, then try again.</div>
             {% endif %}
             {% include 'core/_form_fields.html' %}
-            <button type="submit" class="btn btn-primary">Login</button>
+            <button type="submit" class="btn btn-primary w-100">Login</button>
         </form>
+        <div class="auth-card__footer">
+            <a href="{% url 'home' %}">Back to home</a>
+            <a href="{% url 'payee_login' %}">Pay fees</a>
+        </div>
     </div>
-</div>
+</section>
 {% endblock %}
