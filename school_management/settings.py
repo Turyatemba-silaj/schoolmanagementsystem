@@ -36,6 +36,7 @@ ALLOWED_HOSTS = [
 ]
 
 CSRF_TRUSTED_ORIGINS = [
+    'https://schoolmanagementsystem-topaz.vercel.app',
     'https://*.vercel.app',
 ]
 
@@ -95,7 +96,7 @@ WSGI_APPLICATION = 'school_management.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': Path('/tmp/db.sqlite3') if os.environ.get('VERCEL') and not os.environ.get('DATABASE_URL') else BASE_DIR / 'db.sqlite3',
     }
 }
 
