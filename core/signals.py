@@ -1,4 +1,5 @@
 from django.contrib.auth.signals import user_logged_in, user_logged_out
+from django.db import DatabaseError, OperationalError, ProgrammingError
 from django.dispatch import receiver
 
 from .models import AuditLog
@@ -14,18 +15,21 @@ def client_ip(request):
 def create_auth_log(action, request, user, note):
     path = getattr(request, 'path', '') or ''
     method = getattr(request, 'method', '') or ''
-    AuditLog.objects.create(
-        action=action,
-        model_name='Authentication',
-        object_id=str(user.pk),
-        object_repr=str(user),
-        changed_by=user,
-        path=path[:256],
-        method=method[:12],
-        ip_address=client_ip(request),
-        user_agent=request.META.get('HTTP_USER_AGENT', '')[:256],
-        note=note,
-    )
+    try:
+        AuditLog.objects.create(
+            action=action,
+            model_name='Authentication',
+            object_id=str(user.pk),
+            object_repr=str(user),
+            changed_by=user,
+            path=path[:256],
+            method=method[:12],
+            ip_address=client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:256],
+            note=note,
+        )
+    except (DatabaseError, OperationalError, ProgrammingError):
+        return
 
 
 @receiver(user_logged_in)

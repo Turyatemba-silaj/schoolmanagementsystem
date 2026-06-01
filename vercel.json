@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "python manage.py migrate --noinput && python manage.py collectstatic --noinput && python -c \"from pathlib import Path; assert Path('staticfiles/core/css/site.css').exists()\"",
+  "buildCommand": "python manage.py migrate --noinput && python manage.py bootstrap_admin && python manage.py collectstatic --noinput && python -c \"from pathlib import Path; assert Path('staticfiles/core/css/site.css').exists()\"",
   "builds": [
     {
       "src": "api/index.py",

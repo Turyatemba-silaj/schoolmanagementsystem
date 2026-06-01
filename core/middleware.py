@@ -1,5 +1,6 @@
 from time import monotonic
 
+from django.db import DatabaseError, OperationalError, ProgrammingError
 from django.urls import resolve
 
 from .models import AuditLog
@@ -26,19 +27,22 @@ class AuditLogMiddleware:
         view_name = self.get_view_name(request)
         duration_ms = int((monotonic() - getattr(request, '_audit_started_at', monotonic())) * 1000)
         activity_detail = self.get_activity_detail(request, view_name, response, duration_ms)
-        AuditLog.objects.create(
-            action=action,
-            model_name='System Activity',
-            object_id=str(user.pk),
-            object_repr=f'{user.username} {request.method} {request.path}',
-            changed_by=user,
-            path=request.path[:256],
-            method=request.method[:12],
-            status_code=getattr(response, 'status_code', None),
-            ip_address=self.get_client_ip(request),
-            user_agent=request.META.get('HTTP_USER_AGENT', '')[:256],
-            note=activity_detail,
-        )
+        try:
+            AuditLog.objects.create(
+                action=action,
+                model_name='System Activity',
+                object_id=str(user.pk),
+                object_repr=f'{user.username} {request.method} {request.path}',
+                changed_by=user,
+                path=request.path[:256],
+                method=request.method[:12],
+                status_code=getattr(response, 'status_code', None),
+                ip_address=self.get_client_ip(request),
+                user_agent=request.META.get('HTTP_USER_AGENT', '')[:256],
+                note=activity_detail,
+            )
+        except (DatabaseError, OperationalError, ProgrammingError):
+            return
 
     def get_action(self, request):
         if request.path.endswith('/login/') and request.method == 'POST':
