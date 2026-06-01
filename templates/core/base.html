@@ -20,7 +20,7 @@
             <details class="app-menu" open>
                 <summary>
                     <span>Main</span>
-                    <span class="app-menu__chevron">›</span>
+                    <span class="app-menu__chevron">&rsaquo;</span>
                 </summary>
                 <div class="app-menu__items">
                     <a href="{% url 'home' %}"><span>Home</span></a>
@@ -35,7 +35,7 @@
             <details class="app-menu" open>
                 <summary>
                     <span>Operations</span>
-                    <span class="app-menu__chevron">›</span>
+                    <span class="app-menu__chevron">&rsaquo;</span>
                 </summary>
                 <div class="app-menu__items">
                     <a href="{% url 'attendance_marking' %}"><span>Student Attendance</span></a>
@@ -52,7 +52,7 @@
             <details class="app-menu">
                 <summary>
                     <span>System</span>
-                    <span class="app-menu__chevron">›</span>
+                    <span class="app-menu__chevron">&rsaquo;</span>
                 </summary>
                 <div class="app-menu__items">
                     <a href="{% url 'manage_index' %}"><span>Manage Tables</span></a>
@@ -66,7 +66,7 @@
         <header class="app-topbar">
             <div>
                 <strong>School Management</strong>
-                
+                <span>Records, finance, attendance, and academics</span>
             </div>
             <div class="app-user">
                 {% if user.is_authenticated %}
