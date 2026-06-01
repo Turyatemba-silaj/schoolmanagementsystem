@@ -1,11 +1,12 @@
 from io import BytesIO
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.db.models import Avg, Count, Sum
 from django.forms import modelform_factory
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -81,6 +82,25 @@ from .models import (
 
 class HomeView(TemplateView):
     template_name = 'core/home.html'
+
+
+def bundled_asset(request, asset_name):
+    asset_map = {
+        'site.css': ('static/core/css/site.css', 'text/css'),
+        'muslim-school-hero.png': ('static/core/img/muslim-school-hero.png', 'image/png'),
+    }
+    try:
+        relative_path, content_type = asset_map[asset_name]
+    except KeyError:
+        raise Http404('Asset not found')
+
+    asset_path = settings.BASE_DIR / relative_path
+    if not asset_path.exists():
+        raise Http404('Asset not found')
+
+    response = FileResponse(asset_path.open('rb'), content_type=content_type)
+    response['Cache-Control'] = 'public, max-age=300'
+    return response
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):

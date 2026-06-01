@@ -6,6 +6,7 @@ from .forms import BootstrapAuthenticationForm
 
 urlpatterns = [
     path('', views.HomeView.as_view(), name='home'),
+    path('assets/<str:asset_name>', views.bundled_asset, name='bundled_asset'),
     path(
         'login/',
         LoginView.as_view(

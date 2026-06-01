@@ -485,7 +485,7 @@ h1 {
     align-items: flex-end;
     background:
         linear-gradient(180deg, rgba(8, 42, 36, 0.08), rgba(8, 42, 36, 0.82)),
-        url("../img/muslim-school-hero.png") center / cover;
+        url("/assets/muslim-school-hero.png") center / cover;
     color: #fff;
     font-size: 1.2rem;
     font-weight: 800;
@@ -2009,7 +2009,7 @@ body {
     padding: clamp(1rem, 4vw, 3rem);
     background:
         linear-gradient(120deg, rgba(15, 74, 61, 0.9), rgba(17, 24, 39, 0.74)),
-        url("../img/muslim-school-hero.png") center / cover;
+        url("/assets/muslim-school-hero.png") center / cover;
 }
 
 .auth-card {
