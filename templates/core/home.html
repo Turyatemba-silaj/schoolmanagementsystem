@@ -16,7 +16,7 @@
     </nav>
 </section>
 
-<section class="home-hero home-hero--school" style="background-image: linear-gradient(90deg, rgba(8, 42, 36, 0.94), rgba(8, 42, 36, 0.66), rgba(8, 42, 36, 0.1)), url('{% url 'bundled_asset' 'muslim-school-hero.png' %}');">
+<section class="home-hero home-hero--school interactive-image" style="--home-image: url('{% url 'bundled_asset' 'muslim-school-hero.png' %}');">
     <div class="home-hero__content">
         <p class="home-eyebrow">Faith, knowledge, character</p>
         <h1>Kyabuza Muslim Secondary School</h1>
@@ -136,10 +136,18 @@
         </div>
         <div class="col-lg-8">
             <div class="moment-grid">
-                <div>Qur'an Recitation</div>
-                <div>Science Fair</div>
-                <div>Careers Day</div>
-                <div>Student Leadership</div>
+                <div class="moment-tile interactive-image" style="--tile-image: url('{% url 'bundled_asset' 'muslim-school-hero.png' %}');">
+                    <span>Qur'an Recitation</span>
+                </div>
+                <div class="moment-tile interactive-image" style="--tile-image: url('{% url 'bundled_asset' 'muslim-school-hero.png' %}');">
+                    <span>Science Fair</span>
+                </div>
+                <div class="moment-tile interactive-image" style="--tile-image: url('{% url 'bundled_asset' 'muslim-school-hero.png' %}');">
+                    <span>Careers Day</span>
+                </div>
+                <div class="moment-tile interactive-image" style="--tile-image: url('{% url 'bundled_asset' 'muslim-school-hero.png' %}');">
+                    <span>Student Leadership</span>
+                </div>
             </div>
         </div>
     </div>

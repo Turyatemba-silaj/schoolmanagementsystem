@@ -2126,3 +2126,161 @@ body {
         min-height: 620px;
     }
 }
+
+/* Responsive, interactive home images */
+.home-hero--school.interactive-image {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    min-height: clamp(520px, 78vh, 720px);
+    background-image:
+        linear-gradient(90deg, rgba(8, 42, 36, 0.94), rgba(8, 42, 36, 0.68), rgba(8, 42, 36, 0.18)),
+        var(--home-image);
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    transition: background-size 420ms ease, background-position 420ms ease;
+}
+
+.home-hero--school.interactive-image::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+        radial-gradient(circle at 18% 24%, rgba(255, 255, 255, 0.16), transparent 28%),
+        linear-gradient(180deg, transparent 64%, rgba(8, 42, 36, 0.34));
+    pointer-events: none;
+}
+
+.home-hero--school.interactive-image:hover,
+.home-hero--school.interactive-image:focus-within {
+    background-size: auto, 106%;
+    background-position: center, center 46%;
+}
+
+.moment-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.moment-grid .moment-tile {
+    min-height: clamp(180px, 22vw, 260px);
+    display: flex;
+    align-items: flex-end;
+    padding: 1rem;
+    overflow: hidden;
+    position: relative;
+    isolation: isolate;
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    border-radius: var(--ui-radius);
+    background-image:
+        linear-gradient(180deg, rgba(10, 32, 42, 0.08), rgba(10, 32, 42, 0.82)),
+        var(--tile-image);
+    background-size: auto, cover;
+    background-position: center, center;
+    box-shadow: 0 18px 42px rgba(16, 24, 40, 0.12);
+    color: #fff;
+    cursor: pointer;
+    transition: transform 220ms ease, box-shadow 220ms ease, background-position 360ms ease;
+}
+
+.moment-grid .moment-tile:nth-child(2) {
+    background-position: center, 58% center;
+}
+
+.moment-grid .moment-tile:nth-child(3) {
+    background-position: center, 42% center;
+}
+
+.moment-grid .moment-tile::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(135deg, rgba(22, 115, 91, 0.28), rgba(31, 95, 139, 0.12));
+    opacity: 0;
+    transition: opacity 220ms ease;
+}
+
+.moment-grid .moment-tile span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.25rem;
+    padding: 0.42rem 0.65rem;
+    border-radius: 0.45rem;
+    background: rgba(12, 28, 37, 0.72);
+    color: #fff;
+    font-weight: 800;
+    line-height: 1.15;
+    backdrop-filter: blur(8px);
+}
+
+.moment-grid .moment-tile:hover,
+.moment-grid .moment-tile:focus-within {
+    transform: translateY(-4px);
+    background-position: center, center 45%;
+    box-shadow: 0 24px 54px rgba(16, 24, 40, 0.18);
+}
+
+.moment-grid .moment-tile:hover::after,
+.moment-grid .moment-tile:focus-within::after {
+    opacity: 1;
+}
+
+@media (max-width: 991.98px) {
+    .home-hero--school.interactive-image {
+        min-height: 560px;
+        background-image:
+            linear-gradient(90deg, rgba(8, 42, 36, 0.96), rgba(8, 42, 36, 0.74)),
+            var(--home-image);
+        background-position: center, center;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .public-shell .public-top-strip {
+        position: static;
+    }
+
+    .home-hero--school.interactive-image {
+        min-height: 520px;
+        align-items: flex-end;
+        background-image:
+            linear-gradient(180deg, rgba(8, 42, 36, 0.38), rgba(8, 42, 36, 0.96)),
+            var(--home-image);
+        background-position: center, center top;
+    }
+
+    .home-hero__actions {
+        align-items: stretch;
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .home-hero__actions .btn {
+        width: 100%;
+    }
+
+    .moment-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .moment-grid .moment-tile {
+        min-height: 190px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .home-hero--school.interactive-image,
+    .moment-grid .moment-tile,
+    .moment-grid .moment-tile::after {
+        transition: none;
+    }
+
+    .moment-grid .moment-tile:hover,
+    .moment-grid .moment-tile:focus-within {
+        transform: none;
+    }
+}
