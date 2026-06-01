@@ -1780,3 +1780,66 @@ body {
 .public-footer {
     border-radius: 0;
 }
+
+.public-shell {
+    min-height: 100vh;
+    background: #fff;
+}
+
+.public-shell .app-content {
+    max-width: none;
+    padding: 0;
+}
+
+.public-messages {
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    width: min(92vw, 760px);
+    transform: translateX(-50%);
+    z-index: 30;
+}
+
+.public-shell .public-top-strip {
+    min-height: 52px;
+    padding: 0.7rem clamp(1rem, 4vw, 3rem);
+    background: #fff;
+}
+
+.public-shell .home-hero {
+    min-height: 620px;
+    padding: clamp(5rem, 8vw, 7rem) clamp(1rem, 5vw, 4rem);
+}
+
+.public-shell .home-section,
+.public-shell .home-band,
+.public-shell .partners-band {
+    width: min(1180px, calc(100% - 2rem));
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.public-shell .public-moments,
+.public-shell .public-stats,
+.public-shell .public-footer {
+    width: 100%;
+}
+
+.public-shell .public-stats {
+    padding-left: clamp(1rem, 5vw, 4rem);
+    padding-right: clamp(1rem, 5vw, 4rem);
+}
+
+.public-shell .public-inquiry {
+    box-shadow: 0 16px 44px rgba(17, 24, 39, 0.12);
+}
+
+.public-shell .home-band,
+.public-shell .partners-band {
+    border: 1px solid var(--app-border);
+}
+
+.public-shell .public-footer {
+    padding-left: clamp(1rem, 5vw, 4rem);
+    padding-right: clamp(1rem, 5vw, 4rem);
+}

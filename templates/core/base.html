@@ -9,6 +9,7 @@
     <link href="{% static 'core/css/site.css' %}" rel="stylesheet">
 </head>
 <body>
+{% if user.is_authenticated %}
 <div class="app-shell">
     <aside class="app-sidebar">
         <a class="app-brand" href="{% url 'home' %}">
@@ -18,10 +19,7 @@
 
         <nav class="app-nav app-nav--dropdown" aria-label="Sidebar navigation">
             <details class="app-menu" open>
-                <summary>
-                    <span>Main</span>
-                    <span class="app-menu__chevron">&rsaquo;</span>
-                </summary>
+                <summary><span>Main</span><span class="app-menu__chevron">&rsaquo;</span></summary>
                 <div class="app-menu__items">
                     <a href="{% url 'home' %}"><span>Home</span></a>
                     <a href="{% url 'dashboard' %}"><span>Dashboard</span></a>
@@ -33,10 +31,7 @@
             </details>
 
             <details class="app-menu" open>
-                <summary>
-                    <span>Operations</span>
-                    <span class="app-menu__chevron">&rsaquo;</span>
-                </summary>
+                <summary><span>Operations</span><span class="app-menu__chevron">&rsaquo;</span></summary>
                 <div class="app-menu__items">
                     <a href="{% url 'attendance_marking' %}"><span>Student Attendance</span></a>
                     <a href="{% url 'staff_attendance_marking' %}"><span>Staff Attendance</span></a>
@@ -50,10 +45,7 @@
             </details>
 
             <details class="app-menu">
-                <summary>
-                    <span>System</span>
-                    <span class="app-menu__chevron">&rsaquo;</span>
-                </summary>
+                <summary><span>System</span><span class="app-menu__chevron">&rsaquo;</span></summary>
                 <div class="app-menu__items">
                     <a href="{% url 'manage_index' %}"><span>Manage Tables</span></a>
                     <a href="{% url 'manage_model_list' 'audit-logs' %}"><span>Audit Logs</span></a>
@@ -69,31 +61,35 @@
                 <span>Records, finance, attendance, and academics</span>
             </div>
             <div class="app-user">
-                {% if user.is_authenticated %}
-                    <span>Hello, {{ user.username }}</span>
-                    <form method="post" action="{% url 'logout' %}">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-sm btn-outline-primary">Logout</button>
-                    </form>
-                {% else %}
-                    <a class="btn btn-sm btn-outline-primary" href="{% url 'payee_login' %}">Pay Fees</a>
-                    <a class="btn btn-sm btn-primary" href="{% url 'login' %}">Login</a>
-                {% endif %}
+                <span>Hello, {{ user.username }}</span>
+                <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Logout</button>
+                </form>
             </div>
         </header>
-
         <div class="app-content">
+{% else %}
+<main class="public-shell">
+{% endif %}
+
             {% if messages %}
-                <div class="messages">
+                <div class="messages {% if not user.is_authenticated %}public-messages{% endif %}">
                     {% for message in messages %}
                         <div class="alert alert-{{ message.tags }}">{{ message }}</div>
                     {% endfor %}
                 </div>
             {% endif %}
+
             {% block content %}{% endblock %}
+
+{% if user.is_authenticated %}
         </div>
     </main>
 </div>
+{% else %}
+</main>
+{% endif %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
