@@ -5,7 +5,7 @@
     <div>
         <p class="text-uppercase text-success fw-bold mb-1">Staff Profile</p>
         <h1>{{ staff.full_name }}</h1>
-        <p class="text-muted mb-0">{{ staff.employee_code }} · {{ staff.designation }} · {{ staff.department }}</p>
+        <p class="text-muted mb-0">{{ staff.employee_code }} - {{ staff.designation }} - {{ staff.department }}</p>
     </div>
     <a class="btn btn-outline-secondary" href="{% url 'staff_edit' staff.pk %}">Edit Staff</a>
 </div>
@@ -15,10 +15,10 @@
         <div class="section-panel">
             <h2>Contact</h2>
             <dl class="detail-list">
-                <dt>Phone</dt><dd>{{ staff.phone }}</dd>
-                <dt>Email</dt><dd>{{ staff.email }}</dd>
+                <dt>Phone</dt><dd>{{ staff.phone|default:'-' }}</dd>
+                <dt>Email</dt><dd>{{ staff.email|default:'-' }}</dd>
                 <dt>Status</dt><dd>{{ staff.status }}</dd>
-                <dt>Address</dt><dd>{{ staff.address }}</dd>
+                <dt>Address</dt><dd>{{ staff.address|default:'-' }}</dd>
                 <dt>User</dt><dd>{{ staff.user }}</dd>
             </dl>
         </div>
@@ -28,12 +28,22 @@
             <h2>Teaching Assignments</h2>
             <div class="table-responsive">
                 <table class="table align-middle">
-                    <thead><tr><th>Class</th><th>Subject</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Class</th>
+                            <th>Subject</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         {% for assignment in class_subjects %}
-                            <tr><td>{{ assignment.school_class }}</td><td>{{ assignment.subject }}</td></tr>
+                            <tr>
+                                <td>{{ forloop.counter }}</td>
+                                <td>{{ assignment.school_class }}</td>
+                                <td>{{ assignment.subject }}</td>
+                            </tr>
                         {% empty %}
-                            <tr><td colspan="2">No teaching assignments found.</td></tr>
+                            <tr><td colspan="3" class="text-muted">No teaching assignments found.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -42,48 +52,142 @@
     </div>
 </div>
 
-<div class="row g-4 mt-1">
-    <div class="col-lg-4">
-        <div class="section-panel h-100">
-            <h2>Approved Admissions</h2>
-            {% for admission in approved_admissions %}
-                <div class="record-row"><strong>{{ admission.admission_no }}</strong><span>{{ admission.student }} · {{ admission.admission_date }}</span></div>
-            {% empty %}<p class="text-muted">No admissions approved.</p>{% endfor %}
-        </div>
+<div class="section-panel mt-4">
+    <h2>Recent Staff Attendance</h2>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Replacement For</th>
+                    <th>Replacement Staff</th>
+                    <th>Reason / Notes</th>
+                    <th>Marked By</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in attendance_records %}
+                    <tr>
+                        <td>{{ record.attendance_date }}</td>
+                        <td>{{ record.get_status_display }}</td>
+                        <td>{{ record.replacement_for_staff|default:'-' }}</td>
+                        <td>{{ record.replacement_staff|default:'-' }}</td>
+                        <td>{{ record.absence_reason|default:record.notes|default:'-' }}</td>
+                        <td>{{ record.marked_by|default:'Director of Studies' }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="6" class="text-muted">No staff attendance records.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
-    <div class="col-lg-4">
-        <div class="section-panel h-100">
-            <h2>Leave Records</h2>
-            {% for leave in leave_records %}
-                <div class="record-row"><strong>{{ leave.leave_type }}</strong><span>{{ leave.start_date }} to {{ leave.end_date }} · {{ leave.status }}</span></div>
-            {% empty %}<p class="text-muted">No leave records.</p>{% endfor %}
-        </div>
-    </div>
-    <div class="col-lg-4">
-        <div class="section-panel h-100">
-            <h2>Discipline Follow-up</h2>
-            {% for record in discipline_records %}
-                <div class="record-row"><strong>{{ record.student }}</strong><span>{{ record.offence_type }} · {{ record.status }}</span></div>
-            {% empty %}<p class="text-muted">No discipline records.</p>{% endfor %}
-        </div>
+</div>
+
+<div class="section-panel mt-4">
+    <h2>Payroll History</h2>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th>Period</th>
+                    <th>Base Salary</th>
+                    <th>Present</th>
+                    <th>Sick</th>
+                    <th>Absent</th>
+                    <th>Suspension</th>
+                    <th>Payable / Working</th>
+                    <th>Deductions</th>
+                    <th>Net Salary</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for payroll in payroll_records %}
+                    <tr>
+                        <td>{{ payroll.month }}/{{ payroll.year }}</td>
+                        <td>{{ payroll.base_salary }}</td>
+                        <td>{{ payroll.present_days }}</td>
+                        <td>{{ payroll.sick_days }}</td>
+                        <td>{{ payroll.absent_days }}</td>
+                        <td>{{ payroll.suspension_days }}</td>
+                        <td>{{ payroll.payable_days }}/{{ payroll.working_days }}</td>
+                        <td>{{ payroll.deductions }}</td>
+                        <td><strong>{{ payroll.net_salary }}</strong></td>
+                        <td>{{ payroll.status }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="10" class="text-muted">No payroll records generated.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 
 <div class="row g-4 mt-1">
-    <div class="col-lg-6">
+    <div class="col-xl-4">
         <div class="section-panel h-100">
-            <h2>Recent Staff Attendance</h2>
-            {% for record in attendance_records %}
-                <div class="record-row"><strong>{{ record.attendance_date }}</strong><span>{{ record.status }} · Marked by {{ record.marked_by|default:'Director of Studies' }}</span></div>
-            {% empty %}<p class="text-muted">No staff attendance records.</p>{% endfor %}
+            <h2>Approved Admissions</h2>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Admission No.</th><th>Student</th><th>Date</th></tr></thead>
+                    <tbody>
+                        {% for admission in approved_admissions %}
+                            <tr>
+                                <td>{{ admission.admission_no }}</td>
+                                <td>{{ admission.student }}</td>
+                                <td>{{ admission.admission_date }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="3" class="text-muted">No admissions approved.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
-    <div class="col-lg-6">
+    <div class="col-xl-4">
         <div class="section-panel h-100">
-            <h2>Payroll History</h2>
-            {% for payroll in payroll_records %}
-                <div class="record-row"><strong>{{ payroll.month }}/{{ payroll.year }} · {{ payroll.net_salary }}</strong><span>{{ payroll.payable_days }}/{{ payroll.working_days }} payable days · deductions {{ payroll.deductions }}</span></div>
-            {% empty %}<p class="text-muted">No payroll records generated.</p>{% endfor %}
+            <h2>Leave Records</h2>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Type</th><th>Start</th><th>End</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for leave in leave_records %}
+                            <tr>
+                                <td>{{ leave.leave_type }}</td>
+                                <td>{{ leave.start_date }}</td>
+                                <td>{{ leave.end_date }}</td>
+                                <td>{{ leave.status }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="4" class="text-muted">No leave records.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="section-panel h-100">
+            <h2>Discipline Follow-up</h2>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Student</th><th>Offence</th><th>Date</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for record in discipline_records %}
+                            <tr>
+                                <td>{{ record.student }}</td>
+                                <td>{{ record.offence_type|default:'-' }}</td>
+                                <td>{{ record.record_date }}</td>
+                                <td>{{ record.status }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="4" class="text-muted">No discipline records.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>

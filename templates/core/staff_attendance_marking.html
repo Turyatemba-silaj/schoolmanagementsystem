@@ -5,7 +5,7 @@
     <div>
         <p class="text-uppercase text-success fw-bold mb-1">Director of Studies</p>
         <h1>Staff Attendance</h1>
-        <p class="text-muted mb-0">Mark teachers and staff using P, A, S, or X. These records feed payroll generation.</p>
+        <p class="text-muted mb-0">Mark teachers and staff using P, A, S, or X. A, S, and X require a replacement and reason.</p>
     </div>
     <a class="btn btn-success" href="{% url 'payroll_list' %}">Generate Payroll</a>
 </div>
@@ -50,6 +50,7 @@
                     <th>Employee Code</th>
                     <th>Department</th>
                     <th>Current Status</th>
+                    <th>Replacement / Reason</th>
                     <th class="text-end">Mark</th>
                 </tr>
             </thead>
@@ -61,31 +62,85 @@
                         <td>{{ row.staff.department|default:'-' }}</td>
                         <td>
                             {% if row.status_meta %}
-                                <span class="attendance-pill attendance-pill--{{ row.status_meta.class }}">{{ row.status_meta.code }} · {{ row.status_meta.label }}</span>
+                                <span class="attendance-pill attendance-pill--{{ row.status_meta.class }}">{{ row.status_meta.code }} - {{ row.status_meta.label }}</span>
                             {% else %}
                                 <span class="attendance-pill attendance-pill--muted">Not marked</span>
                             {% endif %}
                         </td>
                         <td>
-                            <div class="attendance-actions">
-                                {% for status, option in status_options.items %}
-                                    <form method="post">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="department_id" value="{% if selected_department %}{{ selected_department.pk }}{% endif %}">
-                                        <input type="hidden" name="attendance_date" value="{{ selected_date }}">
-                                        <input type="hidden" name="staff_id" value="{{ row.staff.pk }}">
-                                        <input type="hidden" name="status" value="{{ status }}">
-                                        <button type="submit" class="attendance-button attendance-button--{{ option.class }} {% if row.status == status %}is-active{% endif %}" title="{{ option.label }}">{{ option.code }}</button>
-                                    </form>
-                                {% endfor %}
+                            {% if row.record and row.record.status != 'present' %}
+                                <strong>{{ row.record.replacement_staff|default:'No replacement' }}</strong>
+                                <div class="text-muted">{{ row.record.absence_reason|default:'No reason recorded' }}</div>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="attendance-actions attendance-actions--staff">
+                                <form method="post">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="department_id" value="{% if selected_department %}{{ selected_department.pk }}{% endif %}">
+                                    <input type="hidden" name="attendance_date" value="{{ selected_date }}">
+                                    <input type="hidden" name="staff_id" value="{{ row.staff.pk }}">
+                                    <input type="hidden" name="status" value="present">
+                                    <button type="submit" class="attendance-button attendance-button--success {% if row.status == 'present' %}is-active{% endif %}" title="Present">P</button>
+                                </form>
+                                <button type="button" class="attendance-button attendance-button--danger {% if row.status == 'absent' %}is-active{% endif %}" data-replacement-trigger data-status="absent" data-code="A" title="Absent">A</button>
+                                <form method="post">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="department_id" value="{% if selected_department %}{{ selected_department.pk }}{% endif %}">
+                                    <input type="hidden" name="attendance_date" value="{{ selected_date }}">
+                                    <input type="hidden" name="staff_id" value="{{ row.staff.pk }}">
+                                    <input type="hidden" name="status" value="sick">
+                                    <button type="button" class="attendance-button attendance-button--warning {% if row.status == 'sick' %}is-active{% endif %}" data-replacement-trigger data-status="sick" data-code="S" title="Sick">S</button>
+                                </form>
+                                <form method="post">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="department_id" value="{% if selected_department %}{{ selected_department.pk }}{% endif %}">
+                                    <input type="hidden" name="attendance_date" value="{{ selected_date }}">
+                                    <input type="hidden" name="staff_id" value="{{ row.staff.pk }}">
+                                    <input type="hidden" name="status" value="suspended">
+                                    <button type="button" class="attendance-button attendance-button--dark {% if row.status == 'suspended' %}is-active{% endif %}" data-replacement-trigger data-status="suspended" data-code="X" title="Suspension">X</button>
+                                </form>
                             </div>
+                            <form method="post" class="absence-form replacement-panel" hidden>
+                                {% csrf_token %}
+                                <input type="hidden" name="department_id" value="{% if selected_department %}{{ selected_department.pk }}{% endif %}">
+                                <input type="hidden" name="attendance_date" value="{{ selected_date }}">
+                                <input type="hidden" name="staff_id" value="{{ row.staff.pk }}">
+                                <input type="hidden" name="status" value="">
+                                <select name="replacement_staff_id" class="form-select form-select-sm absence-form__select" aria-label="Replacement staff" required>
+                                    <option value="">Replacement</option>
+                                    {% for replacement_staff in replacement_staff_members %}
+                                        {% if replacement_staff.pk != row.staff.pk %}
+                                            <option value="{{ replacement_staff.pk }}" {% if row.record.replacement_staff_id == replacement_staff.pk %}selected{% endif %}>{{ replacement_staff.full_name }}</option>
+                                        {% endif %}
+                                    {% endfor %}
+                                </select>
+                                <input type="text" name="absence_reason" class="form-control form-control-sm absence-form__reason" value="{% if row.record %}{{ row.record.absence_reason }}{% endif %}" placeholder="Reason" required>
+                                <button type="submit" class="btn btn-sm btn-primary replacement-panel__submit">Save</button>
+                            </form>
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="5" class="text-muted">No staff found.</td></tr>
+                    <tr><td colspan="6" class="text-muted">No staff found.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+<script>
+    document.querySelectorAll('[data-replacement-trigger]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const cell = button.closest('td');
+            const panel = cell.querySelector('.replacement-panel');
+            const statusInput = panel.querySelector('input[name="status"]');
+            const submitButton = panel.querySelector('.replacement-panel__submit');
+            statusInput.value = button.dataset.status;
+            submitButton.textContent = `Save ${button.dataset.code}`;
+            panel.hidden = false;
+            panel.querySelector('select').focus();
+        });
+    });
+</script>
 {% endblock %}

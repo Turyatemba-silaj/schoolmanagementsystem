@@ -44,6 +44,7 @@
                         <td class="text-end">
                             {% if row.fees_cleared %}
                                 <a class="btn btn-sm btn-success" href="{% url 'report_card_detail' row.student.pk %}">Generate Report Card</a>
+                                <a class="btn btn-sm btn-outline-primary" href="{% url 'report_card_pdf' row.student.pk %}">PDF</a>
                             {% else %}
                                 <button type="button" class="btn btn-sm btn-outline-danger" disabled>Blocked</button>
                             {% endif %}

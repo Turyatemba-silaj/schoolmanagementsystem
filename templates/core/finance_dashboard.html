@@ -1,0 +1,158 @@
+{% extends 'core/base.html' %}
+{% block title %}Finance & Accounts - School Management{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <p class="text-uppercase text-success fw-bold mb-1">Finance Office</p>
+        <h1>Finance & Accounts</h1>
+        <p class="text-muted mb-0">Standard accounting controls for collections, expenses, journals, invoices, and audit review.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-success" href="{% url 'payment_add' %}">Record Payment</a>
+        <a class="btn btn-outline-primary" href="{% url 'manage_model_add' 'expenses' %}">Add Expense</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="metric-card">
+            <span>Income Collected</span>
+            <strong>{{ total_income }}</strong>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="metric-card metric-card--light">
+            <span>Approved Expenses</span>
+            <strong>{{ total_expenses }}</strong>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="metric-card">
+            <span>Net Position</span>
+            <strong>{{ net_position }}</strong>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="metric-card metric-card--light">
+            <span>Outstanding Fees</span>
+            <strong>{{ outstanding_fees }}</strong>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-xl-7">
+        <div class="section-panel">
+            <div class="section-panel__header">
+                <h2>Accounting Process</h2>
+                <span class="text-muted">Daily finance workflow</span>
+            </div>
+            <div class="finance-workflow">
+                <a href="{% url 'payment_list' %}"><strong>1</strong><span>Collect Fees</span></a>
+                <a href="{% url 'manage_model_list' 'invoices' %}"><strong>2</strong><span>Issue Invoices</span></a>
+                <a href="{% url 'manage_model_list' 'expenses' %}"><strong>3</strong><span>Approve Expenses</span></a>
+                <a href="{% url 'manage_model_list' 'journal-entries' %}"><strong>4</strong><span>Post Journals</span></a>
+                <a href="{% url 'manage_model_list' 'audit-logs' %}"><strong>5</strong><span>Review Audit</span></a>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-5">
+        <div class="section-panel">
+            <div class="section-panel__header">
+                <h2>Receivables & Payables</h2>
+                <span class="text-muted">Control totals</span>
+            </div>
+            <div class="mini-metric"><span>Invoice Total</span><strong>{{ invoice_total }}</strong></div>
+            <div class="mini-metric"><span>Invoice Paid</span><strong>{{ invoice_paid }}</strong></div>
+            <div class="mini-metric"><span>Invoice Balance</span><strong>{{ invoice_balance }}</strong></div>
+            <div class="mini-metric"><span>Pending Expenses</span><strong>{{ pending_expenses }}</strong></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-xl-6">
+        <div class="section-panel">
+            <div class="section-panel__header">
+                <h2>Trial Balance Snapshot</h2>
+                <a href="{% url 'manage_model_list' 'accounts' %}">Chart of Accounts</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Account</th><th>Type</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
+                    <tbody>
+                        {% for row in account_rows %}
+                            <tr>
+                                <td>{{ row.account }}</td>
+                                <td>{{ row.account.get_account_type_display }}</td>
+                                <td>{{ row.debit }}</td>
+                                <td>{{ row.credit }}</td>
+                                <td><strong>{{ row.balance }}</strong></td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="5" class="text-muted">Create chart of accounts to begin posting journals.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-6">
+        <div class="section-panel">
+            <div class="section-panel__header">
+                <h2>Recent Audit</h2>
+                <a href="{% url 'manage_model_list' 'audit-logs' %}">Open Audit Logs</a>
+            </div>
+            <ul class="list-unstyled mb-0">
+                {% for audit in recent_audits %}
+                    <li class="record-row">
+                        <strong>{{ audit.get_action_display }} {{ audit.model_name }}</strong>
+                        <span>{{ audit.object_repr }} by {{ audit.changed_by|default:'System' }} on {{ audit.created_at }}{% if audit.path %} at {{ audit.path }}{% endif %}</span>
+                    </li>
+                {% empty %}
+                    <li class="text-muted">No audit activity yet.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-lg-4">
+        <div class="section-panel">
+            <h2>Recent Payments</h2>
+            <ul class="list-unstyled mb-0">
+                {% for payment in recent_payments %}
+                    <li class="linked-list-row"><span>{{ payment.student }}</span><strong>{{ payment.amount_paid }}</strong></li>
+                {% empty %}
+                    <li class="text-muted">No payments recorded.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="section-panel">
+            <h2>Recent Expenses</h2>
+            <ul class="list-unstyled mb-0">
+                {% for expense in recent_expenses %}
+                    <li class="linked-list-row"><span>{{ expense.description }}</span><strong>{{ expense.amount }}</strong></li>
+                {% empty %}
+                    <li class="text-muted">No expenses recorded.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="section-panel">
+            <h2>Recent Journals</h2>
+            <ul class="list-unstyled mb-0">
+                {% for journal in recent_journals %}
+                    <li class="record-row"><strong>{{ journal.entry_no }}</strong><span>{{ journal.description }} - {{ journal.get_status_display }}</span></li>
+                {% empty %}
+                    <li class="text-muted">No journals posted.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

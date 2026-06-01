@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -79,6 +80,22 @@ class StaffAttendance(TimestampedModel):
         blank=True,
         related_name='marked_staff_attendance',
     )
+    replacement_staff = models.ForeignKey(
+        Staff,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='replacement_attendance_records',
+    )
+    replacement_for_staff = models.ForeignKey(
+        Staff,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='covered_attendance_records',
+    )
+    auto_created_replacement = models.BooleanField(default=False)
+    absence_reason = models.TextField(blank=True)
     notes = models.TextField(blank=True)
 
     class Meta:
@@ -363,6 +380,275 @@ class Receipt(TimestampedModel):
 
     def __str__(self):
         return self.receipt_no
+
+
+class Account(TimestampedModel):
+    class AccountType(models.TextChoices):
+        ASSET = 'asset', 'Asset'
+        LIABILITY = 'liability', 'Liability'
+        EQUITY = 'equity', 'Equity'
+        INCOME = 'income', 'Income'
+        EXPENSE = 'expense', 'Expense'
+
+    account_code = models.CharField(max_length=32, unique=True)
+    account_name = models.CharField(max_length=160)
+    account_type = models.CharField(max_length=32, choices=AccountType.choices)
+    parent = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='sub_accounts')
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ('account_code',)
+
+    def __str__(self):
+        return f'{self.account_code} - {self.account_name}'
+
+
+class JournalEntry(TimestampedModel):
+    class Status(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
+        POSTED = 'posted', 'Posted'
+        VOID = 'void', 'Void'
+
+    entry_no = models.CharField(max_length=64, unique=True, blank=True)
+    entry_date = models.DateField(default=timezone.now)
+    description = models.CharField(max_length=256)
+    reference = models.CharField(max_length=128, blank=True)
+    status = models.CharField(max_length=32, choices=Status.choices, default=Status.DRAFT)
+    posted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='posted_journal_entries',
+    )
+    posted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ('-entry_date', '-id')
+
+    def __str__(self):
+        return f'{self.entry_no or "Draft"} - {self.description}'
+
+    def save(self, *args, **kwargs):
+        if not self.entry_no:
+            year = timezone.localdate().year
+            prefix = f'JE{year}'
+            last_entry = JournalEntry.objects.filter(entry_no__startswith=prefix).order_by('-entry_no').first()
+            if last_entry:
+                try:
+                    next_number = int(last_entry.entry_no.replace(prefix, '', 1)) + 1
+                except ValueError:
+                    next_number = JournalEntry.objects.filter(entry_no__startswith=prefix).count() + 1
+            else:
+                next_number = 1
+            self.entry_no = f'{prefix}{next_number:05d}'
+        if self.status == self.Status.POSTED and self.posted_at is None:
+            self.posted_at = timezone.now()
+        super().save(*args, **kwargs)
+
+    @property
+    def total_debit(self):
+        return sum((line.debit for line in self.lines.all()), Decimal('0.00'))
+
+    @property
+    def total_credit(self):
+        return sum((line.credit for line in self.lines.all()), Decimal('0.00'))
+
+    @property
+    def is_balanced(self):
+        return self.total_debit == self.total_credit
+
+
+class JournalLine(TimestampedModel):
+    journal_entry = models.ForeignKey(JournalEntry, on_delete=models.CASCADE, related_name='lines')
+    account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name='journal_lines')
+    description = models.CharField(max_length=256, blank=True)
+    debit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    credit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ('journal_entry', 'id')
+
+    def __str__(self):
+        amount = self.debit if self.debit else self.credit
+        side = 'Dr' if self.debit else 'Cr'
+        return f'{self.journal_entry.entry_no} - {self.account} {side} {amount}'
+
+    def clean(self):
+        if self.debit and self.credit:
+            raise ValidationError('A journal line cannot have both debit and credit amounts.')
+        if not self.debit and not self.credit:
+            raise ValidationError('A journal line must have either a debit or a credit amount.')
+
+
+class Supplier(TimestampedModel):
+    supplier_name = models.CharField(max_length=256)
+    contact_person = models.CharField(max_length=160, blank=True)
+    phone = models.CharField(max_length=32, blank=True)
+    email = models.EmailField(blank=True)
+    address = models.TextField(blank=True)
+    tax_number = models.CharField(max_length=64, blank=True)
+    status = models.CharField(max_length=32, default='active')
+
+    class Meta:
+        ordering = ('supplier_name',)
+
+    def __str__(self):
+        return self.supplier_name
+
+
+class Invoice(TimestampedModel):
+    class Status(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
+        ISSUED = 'issued', 'Issued'
+        PART_PAID = 'part_paid', 'Part Paid'
+        PAID = 'paid', 'Paid'
+        CANCELLED = 'cancelled', 'Cancelled'
+
+    invoice_no = models.CharField(max_length=64, unique=True, blank=True)
+    student = models.ForeignKey(Student, on_delete=models.SET_NULL, null=True, blank=True, related_name='invoices')
+    supplier = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True, related_name='invoices')
+    invoice_date = models.DateField(default=timezone.now)
+    due_date = models.DateField(null=True, blank=True)
+    description = models.CharField(max_length=256)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(max_length=32, choices=Status.choices, default=Status.DRAFT)
+
+    class Meta:
+        ordering = ('-invoice_date', '-id')
+
+    def __str__(self):
+        return f'{self.invoice_no or "Draft invoice"} - {self.description}'
+
+    @property
+    def balance(self):
+        balance = (self.amount or Decimal('0.00')) - (self.amount_paid or Decimal('0.00'))
+        return balance if balance > 0 else Decimal('0.00')
+
+    def save(self, *args, **kwargs):
+        if not self.invoice_no:
+            year = timezone.localdate().year
+            prefix = f'INV{year}'
+            last_invoice = Invoice.objects.filter(invoice_no__startswith=prefix).order_by('-invoice_no').first()
+            if last_invoice:
+                try:
+                    next_number = int(last_invoice.invoice_no.replace(prefix, '', 1)) + 1
+                except ValueError:
+                    next_number = Invoice.objects.filter(invoice_no__startswith=prefix).count() + 1
+            else:
+                next_number = 1
+            self.invoice_no = f'{prefix}{next_number:05d}'
+        if self.amount_paid and self.amount_paid >= self.amount:
+            self.status = self.Status.PAID
+        elif self.amount_paid:
+            self.status = self.Status.PART_PAID
+        super().save(*args, **kwargs)
+
+
+class Expense(TimestampedModel):
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        APPROVED = 'approved', 'Approved'
+        PAID = 'paid', 'Paid'
+        REJECTED = 'rejected', 'Rejected'
+
+    expense_no = models.CharField(max_length=64, unique=True, blank=True)
+    supplier = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True, related_name='expenses')
+    account = models.ForeignKey(Account, on_delete=models.PROTECT, null=True, blank=True, related_name='expenses')
+    expense_date = models.DateField(default=timezone.now)
+    description = models.CharField(max_length=256)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    payment_method = models.CharField(max_length=64, blank=True)
+    reference = models.CharField(max_length=128, blank=True)
+    status = models.CharField(max_length=32, choices=Status.choices, default=Status.PENDING)
+    approved_by = models.ForeignKey(
+        Staff,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_expenses',
+    )
+
+    class Meta:
+        ordering = ('-expense_date', '-id')
+
+    def __str__(self):
+        return f'{self.expense_no or "Draft expense"} - {self.description}'
+
+    def save(self, *args, **kwargs):
+        if not self.expense_no:
+            year = timezone.localdate().year
+            prefix = f'EXP{year}'
+            last_expense = Expense.objects.filter(expense_no__startswith=prefix).order_by('-expense_no').first()
+            if last_expense:
+                try:
+                    next_number = int(last_expense.expense_no.replace(prefix, '', 1)) + 1
+                except ValueError:
+                    next_number = Expense.objects.filter(expense_no__startswith=prefix).count() + 1
+            else:
+                next_number = 1
+            self.expense_no = f'{prefix}{next_number:05d}'
+        super().save(*args, **kwargs)
+
+
+class AuditLogQuerySet(models.QuerySet):
+    def delete(self):
+        raise ValidationError('Audit logs are immutable and cannot be deleted.')
+
+    def update(self, **kwargs):
+        raise ValidationError('Audit logs are immutable and cannot be edited.')
+
+
+def current_local_time():
+    return timezone.localtime().time()
+
+
+class AuditLog(TimestampedModel):
+    class Action(models.TextChoices):
+        VIEW = 'view', 'View'
+        CREATE = 'create', 'Create'
+        UPDATE = 'update', 'Update'
+        DELETE = 'delete', 'Delete'
+        POST = 'post', 'Post'
+        LOGIN = 'login', 'Login'
+        LOGOUT = 'logout', 'Logout'
+        SECURITY = 'security', 'Security'
+
+    action = models.CharField(max_length=32, choices=Action.choices)
+    model_name = models.CharField(max_length=128)
+    object_id = models.CharField(max_length=64, blank=True)
+    object_repr = models.CharField(max_length=256)
+    changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    path = models.CharField(max_length=256, blank=True)
+    method = models.CharField(max_length=12, blank=True)
+    status_code = models.PositiveSmallIntegerField(null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=256, blank=True)
+    note = models.TextField(blank=True)
+    activity_date = models.DateField(default=timezone.localdate)
+    activity_time = models.TimeField(default=current_local_time)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    objects = AuditLogQuerySet.as_manager()
+
+    class Meta:
+        ordering = ('-created_at',)
+
+    def __str__(self):
+        return f'{self.get_action_display()} {self.model_name} {self.object_id}'
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError('Audit logs are immutable and cannot be deleted.')
+
+    def save(self, *args, **kwargs):
+        if self.pk and AuditLog.objects.filter(pk=self.pk).exists():
+            raise ValidationError('Audit logs are immutable and cannot be edited.')
+        local_now = timezone.localtime()
+        self.activity_date = self.activity_date or local_now.date()
+        self.activity_time = self.activity_time or local_now.time()
+        super().save(*args, **kwargs)
 
 
 class LibraryBook(TimestampedModel):

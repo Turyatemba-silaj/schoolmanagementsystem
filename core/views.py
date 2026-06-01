@@ -1,13 +1,21 @@
+from io import BytesIO
+
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.db.models import Avg, Count, Sum
 from django.forms import modelform_factory
-from django.http import Http404, JsonResponse
-from django.shortcuts import redirect, render
+from django.http import Http404, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
+from django.core.exceptions import PermissionDenied
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table
 
 from .forms import (
     ApplicationForm,
@@ -38,6 +46,12 @@ from .models import (
     Hostel,
     HostelAllocation,
     HostelRoom,
+    Account,
+    AuditLog,
+    Expense,
+    Invoice,
+    JournalEntry,
+    JournalLine,
     Holiday,
     LibraryBook,
     OnlineApplication,
@@ -50,6 +64,7 @@ from .models import (
     Staff,
     StaffAttendance,
     Payroll,
+    Supplier,
     Enrollment,
     Subject,
     SystemSetting,
@@ -128,6 +143,51 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 'values': [school_class.enrollment_count for school_class in context['class_overview']],
             },
         }
+        return context
+
+
+class FinanceDashboardView(LoginRequiredMixin, TemplateView):
+    template_name = 'core/finance_dashboard.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        total_income = Payment.objects.aggregate(total=Sum('amount_paid'))['total'] or 0
+        total_expenses = Expense.objects.filter(status__in=['approved', 'paid']).aggregate(total=Sum('amount'))['total'] or 0
+        outstanding_fees = Payment.objects.aggregate(total=Sum('balance'))['total'] or 0
+        invoice_total = Invoice.objects.aggregate(total=Sum('amount'))['total'] or 0
+        invoice_paid = Invoice.objects.aggregate(total=Sum('amount_paid'))['total'] or 0
+        pending_expenses = Expense.objects.filter(status='pending').aggregate(total=Sum('amount'))['total'] or 0
+
+        account_rows = []
+        for account in Account.objects.filter(is_active=True).order_by('account_code'):
+            totals = account.journal_lines.aggregate(debit=Sum('debit'), credit=Sum('credit'))
+            debit = totals['debit'] or 0
+            credit = totals['credit'] or 0
+            balance = debit - credit
+            if account.account_type in [Account.AccountType.LIABILITY, Account.AccountType.EQUITY, Account.AccountType.INCOME]:
+                balance = credit - debit
+            account_rows.append({
+                'account': account,
+                'debit': debit,
+                'credit': credit,
+                'balance': balance,
+            })
+
+        context.update({
+            'total_income': total_income,
+            'total_expenses': total_expenses,
+            'net_position': total_income - total_expenses,
+            'outstanding_fees': outstanding_fees,
+            'invoice_total': invoice_total,
+            'invoice_paid': invoice_paid,
+            'invoice_balance': invoice_total - invoice_paid,
+            'pending_expenses': pending_expenses,
+            'recent_payments': Payment.objects.select_related('student').order_by('-payment_date', '-id')[:6],
+            'recent_expenses': Expense.objects.select_related('supplier', 'account').order_by('-expense_date', '-id')[:6],
+            'recent_journals': JournalEntry.objects.order_by('-entry_date', '-id')[:6],
+            'recent_audits': AuditLog.objects.select_related('changed_by').order_by('-created_at')[:8],
+            'account_rows': account_rows,
+        })
         return context
 
 
@@ -369,6 +429,21 @@ def create_fee_reminder(student, request=None):
         messages.success(request, f'Reminder created for {student}.')
 
 
+def log_audit(action, obj, request=None, note=''):
+    AuditLog.objects.create(
+        action=action,
+        model_name=obj._meta.verbose_name.title(),
+        object_id=str(obj.pk or ''),
+        object_repr=str(obj)[:256],
+        changed_by=request.user if request and request.user.is_authenticated else None,
+        path=request.path[:256] if request else '',
+        method=request.method[:12] if request else '',
+        ip_address=request.META.get('REMOTE_ADDR') if request else None,
+        user_agent=request.META.get('HTTP_USER_AGENT', '')[:256] if request else '',
+        note=note,
+    )
+
+
 class PaymentListView(LoginRequiredMixin, ListView):
     model = Payment
     template_name = 'core/payment_list.html'
@@ -397,12 +472,22 @@ class PaymentCreateView(LoginRequiredMixin, CreateView):
     template_name = 'core/payment_form.html'
     success_url = reverse_lazy('payment_list')
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        log_audit(AuditLog.Action.CREATE, self.object, self.request, 'Student payment recorded.')
+        return response
+
 
 class PaymentUpdateView(LoginRequiredMixin, UpdateView):
     model = Payment
     form_class = PaymentForm
     template_name = 'core/payment_form.html'
     success_url = reverse_lazy('payment_list')
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        log_audit(AuditLog.Action.UPDATE, self.object, self.request, 'Student payment updated.')
+        return response
 
 
 def payee_login(request):
@@ -530,6 +615,33 @@ class ReportCardIndexView(LoginRequiredMixin, ListView):
         return context
 
 
+def build_report_card_context(student):
+    latest_payment = latest_payment_for_student(student)
+    fees_cleared = bool(latest_payment and latest_payment.balance <= 0)
+    context = {
+        'latest_payment': latest_payment,
+        'fees_cleared': fees_cleared,
+        'generated_on': timezone.localdate(),
+    }
+    if not fees_cleared:
+        return context
+
+    exam_results = ExamResult.objects.select_related('exam', 'subject').filter(student=student).order_by('subject__subject_name', '-exam__exam_date')
+    attendance = Attendance.objects.filter(student=student)
+    context.update({
+        'guardians': StudentGuardian.objects.select_related('guardian').filter(student=student),
+        'enrollment': Enrollment.objects.select_related('school_class', 'stream', 'year').filter(student=student).order_by('-enrollment_date').first(),
+        'exam_results': exam_results,
+        'total_marks': exam_results.aggregate(total=Sum('marks_obtained'))['total'] or 0,
+        'average_mark': exam_results.aggregate(avg=Avg('marks_obtained'))['avg'] or 0,
+        'attendance_present': attendance.filter(status='present').count(),
+        'attendance_absent': attendance.filter(status='absent').count(),
+        'attendance_sick': attendance.filter(status='sick').count(),
+        'attendance_suspended': attendance.filter(status='suspended').count(),
+    })
+    return context
+
+
 class ReportCardDetailView(LoginRequiredMixin, DetailView):
     model = Student
     template_name = 'core/report_card_detail.html'
@@ -545,37 +657,133 @@ class ReportCardDetailView(LoginRequiredMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        student = self.object
-        latest_payment = latest_payment_for_student(student)
-        fees_cleared = bool(latest_payment and latest_payment.balance <= 0)
-        if not fees_cleared:
-            context.update({
-                'latest_payment': latest_payment,
-                'fees_cleared': False,
-                'generated_on': timezone.localdate(),
-            })
-            return context
-
-        exam_results = ExamResult.objects.select_related('exam', 'subject').filter(student=student).order_by('subject__subject_name', '-exam__exam_date')
-        total_marks = exam_results.aggregate(total=Sum('marks_obtained'))['total'] or 0
-        average_mark = exam_results.aggregate(avg=Avg('marks_obtained'))['avg'] or 0
-        attendance = Attendance.objects.filter(student=student)
-
-        context.update({
-            'guardians': StudentGuardian.objects.select_related('guardian').filter(student=student),
-            'enrollment': Enrollment.objects.select_related('school_class', 'stream', 'year').filter(student=student).order_by('-enrollment_date').first(),
-            'exam_results': exam_results,
-            'total_marks': total_marks,
-            'average_mark': average_mark,
-            'attendance_present': attendance.filter(status='present').count(),
-            'attendance_absent': attendance.filter(status='absent').count(),
-            'attendance_sick': attendance.filter(status='sick').count(),
-            'attendance_suspended': attendance.filter(status='suspended').count(),
-            'latest_payment': latest_payment,
-            'fees_cleared': fees_cleared,
-            'generated_on': timezone.localdate(),
-        })
+        context.update(build_report_card_context(self.object))
         return context
+
+
+def report_card_pdf_response(student, context):
+    buffer = BytesIO()
+    safe_admission_no = ''.join(char for char in student.admission_no if char.isalnum() or char in ('-', '_'))
+    filename = f'report-card-{safe_admission_no or student.pk}.pdf'
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=0.45 * inch,
+        leftMargin=0.45 * inch,
+        topMargin=0.45 * inch,
+        bottomMargin=0.45 * inch,
+        title=f'{student} Report Card',
+    )
+    styles = getSampleStyleSheet()
+    story = [
+        Paragraph('Kyabuza Muslim Secondary School', styles['Title']),
+        Paragraph('Official Student Report Card', styles['Heading2']),
+        Paragraph(f'Generated on {context["generated_on"]}', styles['Normal']),
+        Spacer(1, 0.18 * inch),
+    ]
+
+    guardians = ', '.join(link.guardian.full_name for link in context['guardians']) or '-'
+    enrollment = context['enrollment']
+    student_details = [
+        ['Student Name', str(student), 'Admission No.', student.admission_no],
+        ['Class', str(enrollment.school_class) if enrollment else '-', 'Stream', str(enrollment.stream) if enrollment and enrollment.stream else '-'],
+        ['Academic Year', str(enrollment.year) if enrollment else '-', 'Gender', student.gender or '-'],
+        ['Guardian', guardians, 'Fee Status', 'Cleared'],
+    ]
+    story.append(Table(student_details, colWidths=[1.25 * inch, 2.2 * inch, 1.25 * inch, 2.2 * inch], style=[
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#b9c8d8')),
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#eef5fc')),
+        ('BACKGROUND', (2, 0), (2, -1), colors.HexColor('#eef5fc')),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    story.append(Spacer(1, 0.18 * inch))
+
+    result_rows = [['Subject', 'Exam', 'Exam Date', 'Max', 'Marks', 'Grade', 'Remarks']]
+    for result in context['exam_results']:
+        result_rows.append([
+            str(result.subject),
+            result.exam.exam_name,
+            str(result.exam.exam_date),
+            str(result.exam.max_marks),
+            str(result.marks_obtained),
+            result.grade or '-',
+            Paragraph(result.remarks or '-', styles['BodyText']),
+        ])
+    if len(result_rows) == 1:
+        result_rows.append(['No exam results found.', '', '', '', '', '', ''])
+    result_rows.append(['Total / Average', '', '', '', str(context['total_marks']), f'Average: {context["average_mark"]:.1f}', ''])
+    story.extend([
+        Paragraph('Exam Results', styles['Heading2']),
+        Table(result_rows, repeatRows=1, colWidths=[1.1 * inch, 1.2 * inch, 0.82 * inch, 0.55 * inch, 0.65 * inch, 0.6 * inch, 1.55 * inch], style=[
+            ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#b9c8d8')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#123a63')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#eef5fc')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('FONTSIZE', (0, 0), (-1, -1), 7.5),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ]),
+        Spacer(1, 0.18 * inch),
+    ])
+
+    latest_payment = context['latest_payment']
+    attendance_rows = [
+        ['Present', context['attendance_present'], 'Absent', context['attendance_absent'], 'Sick', context['attendance_sick'], 'Suspension', context['attendance_suspended']],
+        ['Latest Payment', latest_payment.amount_paid, 'Payment Date', latest_payment.payment_date, 'Latest Balance', latest_payment.balance, '', ''],
+    ]
+    story.extend([
+        Paragraph('Attendance & Fees', styles['Heading2']),
+        Table(attendance_rows, colWidths=[0.9 * inch, 0.75 * inch, 0.9 * inch, 0.75 * inch, 0.95 * inch, 0.75 * inch, 0.9 * inch, 0.75 * inch], style=[
+            ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#b9c8d8')),
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#eef5fc')),
+            ('BACKGROUND', (2, 0), (2, -1), colors.HexColor('#eef5fc')),
+            ('BACKGROUND', (4, 0), (4, -1), colors.HexColor('#eef5fc')),
+            ('BACKGROUND', (6, 0), (6, -1), colors.HexColor('#eef5fc')),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (4, 0), (4, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (6, 0), (6, -1), 'Helvetica-Bold'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ]),
+        Spacer(1, 0.55 * inch),
+        Table([['Class Teacher', 'Director of Studies', 'Head Teacher'], ['', '', '']], colWidths=[2.15 * inch, 2.15 * inch, 2.15 * inch], style=[
+            ('LINEABOVE', (0, 1), (-1, 1), 0.7, colors.HexColor('#728197')),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ]),
+    ])
+
+    doc.build(story)
+    response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+def report_card_pdf(request, pk):
+    student = get_object_or_404(
+        Student.objects.select_related('user').prefetch_related(
+            'guardian_links__guardian',
+            'enrollments__school_class',
+            'enrollments__stream',
+            'enrollments__year',
+        ),
+        pk=pk,
+    )
+    context = build_report_card_context(student)
+    if not context['fees_cleared']:
+        messages.error(request, 'PDF report card is blocked until school fees are cleared.')
+        return redirect('report_card_detail', pk=student.pk)
+    return report_card_pdf_response(student, context)
 
 
 ATTENDANCE_STATUS_OPTIONS = {
@@ -596,6 +804,48 @@ STAFF_ATTENDANCE_STATUS_OPTIONS = {
 
 def get_current_staff(user):
     return Staff.objects.filter(user=user).first()
+
+
+def clear_replacement_attendance(staff, attendance_date):
+    replacement_records = StaffAttendance.objects.filter(
+        attendance_date=attendance_date,
+        replacement_for_staff=staff,
+    )
+    replacement_records.filter(auto_created_replacement=True).delete()
+    replacement_records.filter(auto_created_replacement=False).update(
+        replacement_for_staff=None,
+        notes='',
+    )
+
+
+def award_replacement_attendance(staff, replacement_staff, attendance_date, status, reason, marker):
+    clear_replacement_attendance(staff, attendance_date)
+    replacement_record = StaffAttendance.objects.filter(
+        staff=replacement_staff,
+        attendance_date=attendance_date,
+    ).first()
+    note = (
+        f'Replacement attendance for {staff.full_name}. '
+        f'Original status: {STAFF_ATTENDANCE_STATUS_OPTIONS[status]["label"]}. '
+        f'Reason: {reason}'
+    )
+    if replacement_record is None:
+        StaffAttendance.objects.create(
+            staff=replacement_staff,
+            attendance_date=attendance_date,
+            status=StaffAttendance.Status.PRESENT,
+            marked_by=marker,
+            replacement_for_staff=staff,
+            auto_created_replacement=True,
+            notes=note,
+        )
+        return
+
+    replacement_record.status = StaffAttendance.Status.PRESENT
+    replacement_record.marked_by = marker
+    replacement_record.replacement_for_staff = staff
+    replacement_record.notes = note
+    replacement_record.save()
 
 
 @login_required
@@ -710,8 +960,15 @@ def staff_attendance_marking(request):
     if request.method == 'POST':
         staff = Staff.objects.filter(pk=request.POST.get('staff_id')).first()
         status = request.POST.get('status')
+        replacement_staff = Staff.objects.filter(pk=request.POST.get('replacement_staff_id')).first()
+        absence_reason = request.POST.get('absence_reason', '').strip()
+        needs_replacement = status in ['absent', 'sick', 'suspended']
         if not staff or status not in STAFF_ATTENDANCE_STATUS_OPTIONS:
             messages.error(request, 'Staff attendance could not be saved. Please choose a valid staff member and status.')
+        elif needs_replacement and (not replacement_staff or not absence_reason):
+            messages.error(request, 'Absent, sick, or suspended staff must have a replacement staff member and reason recorded.')
+        elif needs_replacement and replacement_staff == staff:
+            messages.error(request, 'Replacement staff must be different from the absent staff member.')
         else:
             record, _ = StaffAttendance.objects.get_or_create(
                 staff=staff,
@@ -720,7 +977,17 @@ def staff_attendance_marking(request):
             )
             record.status = status
             record.marked_by = marker
+            if needs_replacement:
+                record.replacement_staff = replacement_staff
+                record.absence_reason = absence_reason
+            else:
+                record.replacement_staff = None
+                record.absence_reason = ''
             record.save()
+            if needs_replacement:
+                award_replacement_attendance(staff, replacement_staff, selected_date, status, absence_reason, marker)
+            else:
+                clear_replacement_attendance(staff, selected_date)
             messages.success(request, f'{staff.full_name} marked {STAFF_ATTENDANCE_STATUS_OPTIONS[status]["label"]}.')
 
         redirect_url = f'{reverse_lazy("staff_attendance_marking")}?date={selected_date}'
@@ -730,17 +997,19 @@ def staff_attendance_marking(request):
 
     records = {
         record.staff_id: record
-        for record in StaffAttendance.objects.filter(
+        for record in StaffAttendance.objects.select_related('replacement_staff').filter(
             attendance_date=selected_date,
             staff_id__in=staff_queryset.values_list('id', flat=True),
         )
     }
+    replacement_staff_members = Staff.objects.select_related('department').filter(status='active').order_by('full_name')
     rows = []
     for staff in staff_queryset:
         record = records.get(staff.id)
         status = record.status if record else ''
         rows.append({
             'staff': staff,
+            'record': record,
             'status': status,
             'status_meta': STAFF_ATTENDANCE_STATUS_OPTIONS.get(status),
         })
@@ -756,6 +1025,7 @@ def staff_attendance_marking(request):
         'selected_department': selected_department,
         'selected_date': selected_date,
         'attendance_rows': rows,
+        'replacement_staff_members': replacement_staff_members,
         'status_options': STAFF_ATTENDANCE_STATUS_OPTIONS,
         'summary': summary,
     })
@@ -780,7 +1050,7 @@ def payroll_list(request):
             absent_days = records.filter(status='absent').count()
             suspension_days = records.filter(status='suspended').count()
             working_days = present_days + sick_days + absent_days + suspension_days
-            payable_days = present_days + sick_days
+            payable_days = present_days
             base_salary = staff.base_salary or 0
             if working_days:
                 net_salary = base_salary * payable_days / working_days
@@ -874,6 +1144,13 @@ MANAGED_MODELS = {
     'fee-discounts': FeeDiscount,
     'payments': Payment,
     'receipts': Receipt,
+    'accounts': Account,
+    'journal-entries': JournalEntry,
+    'journal-lines': JournalLine,
+    'suppliers': Supplier,
+    'invoices': Invoice,
+    'expenses': Expense,
+    'audit-logs': AuditLog,
     'library-books': LibraryBook,
     'book-borrowings': BookBorrowing,
     'hostels': Hostel,
@@ -910,8 +1187,8 @@ MANAGED_GROUPS = [
     },
     {
         'name': 'Finance',
-        'description': 'Fee structures, discounts, payments, and receipts.',
-        'models': ['fees-structures', 'fee-discounts', 'payments', 'receipts'],
+        'description': 'Fees, accounting, suppliers, expenses, invoices, journals, and audit trail.',
+        'models': ['fees-structures', 'fee-discounts', 'payments', 'receipts', 'accounts', 'journal-entries', 'journal-lines', 'suppliers', 'invoices', 'expenses', 'audit-logs'],
     },
     {
         'name': 'Admissions',
@@ -979,6 +1256,7 @@ class ManagedListView(LoginRequiredMixin, ListView):
         context['add_url_name'] = 'manage_model_add'
         context['edit_url_name'] = 'manage_model_edit'
         context['model_name_slug'] = self.model_name
+        context['is_audit_log'] = self.model is AuditLog
         return context
 
 
@@ -988,6 +1266,8 @@ class ManagedCreateView(LoginRequiredMixin, CreateView):
     def dispatch(self, request, *args, **kwargs):
         self.model_name = kwargs['model_name']
         self.model = get_managed_model(self.model_name)
+        if self.model is AuditLog:
+            raise PermissionDenied('Audit logs are immutable and cannot be created manually.')
         return super().dispatch(request, *args, **kwargs)
 
     def get_form_class(self):
@@ -1003,6 +1283,12 @@ class ManagedCreateView(LoginRequiredMixin, CreateView):
         context['model_name_plural'] = self.model._meta.verbose_name_plural.title()
         return context
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        if self.model is not AuditLog:
+            log_audit(AuditLog.Action.CREATE, self.object, self.request, 'Record created from managed tables.')
+        return response
+
     def get_success_url(self):
         return reverse_lazy('manage_model_list', kwargs={'model_name': self.model_name})
 
@@ -1013,6 +1299,8 @@ class ManagedUpdateView(LoginRequiredMixin, UpdateView):
     def dispatch(self, request, *args, **kwargs):
         self.model_name = kwargs['model_name']
         self.model = get_managed_model(self.model_name)
+        if self.model is AuditLog:
+            raise PermissionDenied('Audit logs are immutable and cannot be edited.')
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
@@ -1030,6 +1318,12 @@ class ManagedUpdateView(LoginRequiredMixin, UpdateView):
         context['model_name'] = self.model._meta.verbose_name.title()
         context['model_name_plural'] = self.model._meta.verbose_name_plural.title()
         return context
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        if self.model is not AuditLog:
+            log_audit(AuditLog.Action.UPDATE, self.object, self.request, 'Record updated from managed tables.')
+        return response
 
     def get_success_url(self):
         return reverse_lazy('manage_model_list', kwargs={'model_name': self.model_name})

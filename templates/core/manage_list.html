@@ -4,12 +4,46 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h1>{{ model_name_plural }}</h1>
-        <p class="text-muted">Manage all {{ model_name_plural }} records.</p>
+        <p class="text-muted">{% if is_audit_log %}Read-only security trail of user activity, access time, and submitted actions.{% else %}Manage all {{ model_name_plural }} records.{% endif %}</p>
     </div>
-    <a class="btn btn-success" href="{% url 'manage_model_add' model_name_slug %}">Add {{ model_name }}</a>
+    {% if not is_audit_log %}
+        <a class="btn btn-success" href="{% url 'manage_model_add' model_name_slug %}">Add {{ model_name }}</a>
+    {% endif %}
 </div>
 <div class="table-responsive">
 <table class="table table-striped">
+    {% if is_audit_log %}
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Time</th>
+            <th>User</th>
+            <th>Action</th>
+            <th>Activity</th>
+            <th>Method</th>
+            <th>Status</th>
+            <th>IP Address</th>
+            <th>Details</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for object in objects %}
+            <tr>
+                <td>{{ object.activity_date }}</td>
+                <td>{{ object.activity_time }}</td>
+                <td>{{ object.changed_by|default:'System' }}</td>
+                <td>{{ object.get_action_display }}</td>
+                <td>{{ object.path|default:object.object_repr }}</td>
+                <td>{{ object.method|default:'-' }}</td>
+                <td>{{ object.status_code|default:'-' }}</td>
+                <td>{{ object.ip_address|default:'-' }}</td>
+                <td>{{ object.note|default:'-' }}</td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="9">No {{ model_name_plural|lower }} found.</td></tr>
+        {% endfor %}
+    </tbody>
+    {% else %}
     <thead>
         <tr><th>#</th><th>Name</th><th>Actions</th></tr>
     </thead>
@@ -26,6 +60,7 @@
             <tr><td colspan="3">No {{ model_name_plural|lower }} found.</td></tr>
         {% endfor %}
     </tbody>
+    {% endif %}
 </table>
 </div>
 {% endblock %}

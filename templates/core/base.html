@@ -40,6 +40,7 @@
                 <div class="app-menu__items">
                     <a href="{% url 'attendance_marking' %}"><span>Student Attendance</span></a>
                     <a href="{% url 'staff_attendance_marking' %}"><span>Staff Attendance</span></a>
+                    <a href="{% url 'finance_dashboard' %}"><span>Finance & Accounts</span></a>
                     <a href="{% url 'payment_list' %}"><span>Payments</span></a>
                     <a href="{% url 'payee_login' %}"><span>Pay Fees</span></a>
                     <a href="{% url 'payroll_list' %}"><span>Payroll</span></a>
@@ -55,6 +56,7 @@
                 </summary>
                 <div class="app-menu__items">
                     <a href="{% url 'manage_index' %}"><span>Manage Tables</span></a>
+                    <a href="{% url 'manage_model_list' 'audit-logs' %}"><span>Audit Logs</span></a>
                 </div>
             </details>
         </nav>
