@@ -46,6 +46,7 @@ urlpatterns = [
     path('applications/', views.ApplicationListView.as_view(), name='application_list'),
     path('applications/add/', views.ApplicationCreateView.as_view(), name='application_add'),
     path('applications/<int:pk>/', views.ApplicationDetailView.as_view(), name='application_detail'),
+    path('applications/<int:pk>/admission-letter/pdf/', views.admission_letter_pdf, name='admission_letter_pdf'),
     path('applications/<int:pk>/edit/', views.ApplicationUpdateView.as_view(), name='application_edit'),
     path('manage/', views.ManageIndexView.as_view(), name='manage_index'),
     path('manage/<slug:model_name>/', views.ManagedListView.as_view(), name='manage_model_list'),

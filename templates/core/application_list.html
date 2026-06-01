@@ -8,13 +8,14 @@
 <div class="table-responsive">
 <table class="table table-striped">
     <thead>
-        <tr><th>Application No</th><th>Applicant</th><th>Applied Class</th><th>Status</th><th></th></tr>
+        <tr><th>Application No</th><th>Applicant</th><th>Mode</th><th>Applied Class</th><th>Status</th><th></th></tr>
     </thead>
     <tbody>
         {% for application in applications %}
             <tr>
                 <td>{{ application.application_no }}</td>
                 <td>{{ application.applicant_name }}</td>
+                <td>{{ application.get_application_mode_display }}</td>
                 <td>{{ application.applied_class }}</td>
                 <td>{{ application.status }}</td>
                 <td>
@@ -23,7 +24,7 @@
                 </td>
             </tr>
         {% empty %}
-            <tr><td colspan="5">No applications found.</td></tr>
+            <tr><td colspan="6">No applications found.</td></tr>
         {% endfor %}
     </tbody>
 </table>

@@ -99,6 +99,7 @@ class ApplicationForm(BootstrapModelForm):
     class Meta:
         model = OnlineApplication
         fields = [
+            'application_mode',
             'applicant_name',
             'dob',
             'gender',

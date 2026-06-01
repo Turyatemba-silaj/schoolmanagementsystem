@@ -447,6 +447,7 @@ class Command(BaseCommand):
                 application_no=f'APP2026{index:04d}',
                 defaults={
                     'applicant_name': f'Demo Applicant {index}',
+                    'application_mode': OnlineApplication.ApplicationMode.ONLINE if index % 2 else OnlineApplication.ApplicationMode.PHYSICAL,
                     'dob': date(2011 + index, 4, min(index, 28)),
                     'gender': 'Female' if index % 2 else 'Male',
                     'previous_school': f'Previous School {index}',

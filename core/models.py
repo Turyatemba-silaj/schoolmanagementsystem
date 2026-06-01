@@ -742,7 +742,12 @@ class TransportAllocation(TimestampedModel):
 
 
 class OnlineApplication(TimestampedModel):
+    class ApplicationMode(models.TextChoices):
+        ONLINE = 'online', 'Online'
+        PHYSICAL = 'physical', 'Physical'
+
     application_no = models.CharField(max_length=128, unique=True)
+    application_mode = models.CharField(max_length=32, choices=ApplicationMode.choices, default=ApplicationMode.ONLINE)
     applicant_name = models.CharField(max_length=256)
     dob = models.DateField(null=True, blank=True)
     gender = models.CharField(max_length=32, blank=True)

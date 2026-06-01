@@ -388,17 +388,25 @@ class ApplicationDetailView(LoginRequiredMixin, DetailView):
         action = request.POST.get('action')
         if action == 'save_requirements':
             update_application_requirement_checks(self.object, request)
-            messages.success(request, 'Application requirements updated.')
+            if self.object.application_mode == OnlineApplication.ApplicationMode.ONLINE and application_requirements_satisfied(self.object):
+                admission = get_or_create_application_admission(self.object, request)
+                messages.success(
+                    request,
+                    f'Online admission completed automatically. Admission letter {admission.admission_no} is ready.',
+                )
+                return redirect('admission_letter_pdf', pk=self.object.pk)
+            else:
+                messages.success(request, 'Application requirements updated.')
             return redirect('application_detail', pk=self.object.pk)
         if action == 'issue_admission':
             try:
-                admission = admit_application(self.object, request)
+                admission = get_or_create_application_admission(self.object, request)
             except ValidationError as exc:
                 messages.error(request, '; '.join(exc.messages))
             else:
                 messages.success(
                     request,
-                    f'Admission number {admission.admission_no} issued and student record created.',
+                    f'Admission letter {admission.admission_no} issued and student record created.',
                 )
             return redirect('application_detail', pk=self.object.pk)
         return super().get(request, *args, **kwargs)
@@ -534,6 +542,13 @@ def unique_student_username(admission_no):
     return f'{username}-{counter}'
 
 
+def get_or_create_application_admission(application, request):
+    admission = Admission.objects.filter(application=application).select_related('student').first()
+    if admission:
+        return admission
+    return admit_application(application, request)
+
+
 @transaction.atomic
 def admit_application(application, request):
     if Admission.objects.filter(application=application).exists():
@@ -589,6 +604,84 @@ def admit_application(application, request):
     application.save(update_fields=['status', 'updated_at'])
     log_audit(AuditLog.Action.CREATE, admission, request, 'Application admitted after all requirements were satisfied.')
     return admission
+
+
+def admission_letter_pdf_response(admission):
+    buffer = BytesIO()
+    application = admission.application
+    student = admission.student
+    safe_admission_no = ''.join(char for char in admission.admission_no if char.isalnum() or char in ('-', '_'))
+    filename = f'admission-letter-{safe_admission_no or admission.pk}.pdf'
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=0.55 * inch,
+        leftMargin=0.55 * inch,
+        topMargin=0.55 * inch,
+        bottomMargin=0.55 * inch,
+        title=f'{student} Admission Letter',
+    )
+    styles = getSampleStyleSheet()
+    story = [
+        Paragraph('Kyabuza Muslim Secondary School', styles['Title']),
+        Paragraph('Official Admission Letter', styles['Heading2']),
+        Spacer(1, 0.2 * inch),
+        Paragraph(f'Date: {timezone.localdate()}', styles['Normal']),
+        Paragraph(f'Admission Number: <b>{admission.admission_no}</b>', styles['Normal']),
+        Spacer(1, 0.2 * inch),
+        Paragraph(f'Dear {student.first_name} {student.last_name},', styles['Normal']),
+        Spacer(1, 0.12 * inch),
+        Paragraph(
+            'We are pleased to confirm that you have been admitted to Kyabuza Muslim Secondary School. '
+            'This letter confirms that the school admission requirements have been verified and your student record has been created.',
+            styles['Normal'],
+        ),
+        Spacer(1, 0.2 * inch),
+        Table(
+            [
+                ['Student Name', str(student)],
+                ['Admission No.', admission.admission_no],
+                ['Application No.', application.application_no if application else '-'],
+                ['Application Mode', application.get_application_mode_display() if application else '-'],
+                ['Admitted Class', str(application.applied_class) if application and application.applied_class else '-'],
+                ['Admission Date', str(admission.admission_date)],
+                ['Status', admission.status.title()],
+            ],
+            colWidths=[1.8 * inch, 4.5 * inch],
+            style=[
+                ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#d0d5dd')),
+                ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f2f4f7')),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('PADDING', (0, 0), (-1, -1), 8),
+            ],
+        ),
+        Spacer(1, 0.25 * inch),
+        Paragraph(
+            'Please present this admission letter to the school administration office for final reporting instructions, fees guidance, and class placement confirmation.',
+            styles['Normal'],
+        ),
+        Spacer(1, 0.35 * inch),
+        Paragraph('Issued by: School Administration', styles['Normal']),
+    ]
+    doc.build(story)
+    response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+def admission_letter_pdf(request, pk):
+    application = get_object_or_404(OnlineApplication, pk=pk)
+    if not application_requirements_satisfied(application):
+        messages.error(request, 'Admission letter cannot be generated until all required school requirements are satisfied.')
+        return redirect('application_detail', pk=application.pk)
+    try:
+        admission = get_or_create_application_admission(application, request)
+    except ValidationError as exc:
+        messages.error(request, '; '.join(exc.messages))
+        return redirect('application_detail', pk=application.pk)
+    return admission_letter_pdf_response(admission)
 
 
 def latest_payment_for_student(student):
