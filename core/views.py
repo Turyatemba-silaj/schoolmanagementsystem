@@ -4,13 +4,15 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
-from django.db.models import Avg, Count, Sum
+from django.contrib.auth import get_user_model
+from django.db.models import Avg, Count, Q, Sum
+from django.db import transaction
 from django.forms import modelform_factory
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -31,6 +33,8 @@ from .forms import (
 from .models import (
     AcademicYear,
     Admission,
+    ApplicationRequirement,
+    ApplicationRequirementCheck,
     ApplicationDocument,
     Attendance,
     BookBorrowing,
@@ -375,21 +379,216 @@ class ApplicationDetailView(LoginRequiredMixin, DetailView):
         application = self.object
         context['documents'] = ApplicationDocument.objects.filter(application=application).order_by('-uploaded_at')
         context['admissions'] = Admission.objects.select_related('student', 'approved_by').filter(application=application).order_by('-admission_date')
+        context['requirement_checks'] = get_application_requirement_checks(application)
+        context['requirements_satisfied'] = application_requirements_satisfied(application)
         return context
 
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        action = request.POST.get('action')
+        if action == 'save_requirements':
+            update_application_requirement_checks(self.object, request)
+            messages.success(request, 'Application requirements updated.')
+            return redirect('application_detail', pk=self.object.pk)
+        if action == 'issue_admission':
+            try:
+                admission = admit_application(self.object, request)
+            except ValidationError as exc:
+                messages.error(request, '; '.join(exc.messages))
+            else:
+                messages.success(
+                    request,
+                    f'Admission number {admission.admission_no} issued and student record created.',
+                )
+            return redirect('application_detail', pk=self.object.pk)
+        return super().get(request, *args, **kwargs)
 
-class ApplicationCreateView(LoginRequiredMixin, CreateView):
+
+class ApplicationCreateView(CreateView):
     model = OnlineApplication
     form_class = ApplicationForm
     template_name = 'core/application_form.html'
-    success_url = reverse_lazy('application_list')
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        save_application_document_from_form(self.object, form)
+        log_audit(AuditLog.Action.CREATE, self.object, self.request, 'Online application created.')
+        messages.success(self.request, f'Application {self.object.application_no} submitted for review.')
+        return response
+
+    def get_success_url(self):
+        if not self.request.user.is_authenticated:
+            return reverse_lazy('home')
+        return reverse_lazy('application_detail', kwargs={'pk': self.object.pk})
 
 
 class ApplicationUpdateView(LoginRequiredMixin, UpdateView):
     model = OnlineApplication
     form_class = ApplicationForm
     template_name = 'core/application_form.html'
-    success_url = reverse_lazy('application_list')
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        save_application_document_from_form(self.object, form)
+        log_audit(AuditLog.Action.UPDATE, self.object, self.request, 'Online application updated.')
+        return response
+
+    def get_success_url(self):
+        return reverse_lazy('application_detail', kwargs={'pk': self.object.pk})
+
+
+def application_requirements_for(application):
+    return ApplicationRequirement.objects.filter(status='active').filter(
+        Q(applied_class__isnull=True) | Q(applied_class=application.applied_class)
+    ).order_by('sort_order', 'requirement_name')
+
+
+def get_application_requirement_checks(application):
+    requirements = application_requirements_for(application)
+    checks = {
+        check.requirement_id: check
+        for check in ApplicationRequirementCheck.objects.select_related('requirement').filter(
+            application=application,
+            requirement__in=requirements,
+        )
+    }
+    rows = []
+    for requirement in requirements:
+        check = checks.get(requirement.id)
+        if check is None:
+            check = ApplicationRequirementCheck.objects.create(
+                application=application,
+                requirement=requirement,
+            )
+        rows.append(check)
+    return rows
+
+
+def application_requirements_satisfied(application):
+    checks = get_application_requirement_checks(application)
+    required_checks = [check for check in checks if check.requirement.is_required]
+    return bool(required_checks) and all(check.is_satisfied for check in required_checks)
+
+
+def update_application_requirement_checks(application, request):
+    reviewer = get_current_staff(request.user)
+    for check in get_application_requirement_checks(application):
+        check.is_satisfied = request.POST.get(f'requirement_{check.requirement_id}') == 'on'
+        check.note = request.POST.get(f'note_{check.requirement_id}', '').strip()
+        check.reviewed_by = reviewer
+        check.reviewed_at = timezone.now()
+        check.save()
+    log_audit(AuditLog.Action.UPDATE, application, request, 'Application requirement checklist reviewed.')
+
+
+def save_application_document_from_form(application, form):
+    document_type = form.cleaned_data.get('document_type')
+    document_file = form.cleaned_data.get('document_file')
+    if not document_type or not document_file:
+        return
+    ApplicationDocument.objects.create(
+        application=application,
+        document_type=document_type,
+        file_path=document_file,
+    )
+    matching_requirements = application_requirements_for(application).filter(requirement_name__iexact=document_type)
+    for requirement in matching_requirements:
+        ApplicationRequirementCheck.objects.update_or_create(
+            application=application,
+            requirement=requirement,
+            defaults={
+                'is_satisfied': True,
+                'note': 'Supporting document uploaded with the application.',
+                'reviewed_at': timezone.now(),
+            },
+        )
+
+
+def generate_admission_no():
+    year = timezone.localdate().year
+    prefix = f'ADM{year}-'
+    last_student = Student.objects.filter(admission_no__startswith=prefix).order_by('-admission_no').first()
+    if last_student:
+        try:
+            next_number = int(last_student.admission_no.replace(prefix, '', 1)) + 1
+        except ValueError:
+            next_number = Student.objects.filter(admission_no__startswith=prefix).count() + 1
+    else:
+        next_number = 1
+
+    admission_no = f'{prefix}{next_number:04d}'
+    while Student.objects.filter(admission_no=admission_no).exists() or Admission.objects.filter(admission_no=admission_no).exists():
+        next_number += 1
+        admission_no = f'{prefix}{next_number:04d}'
+    return admission_no
+
+
+def unique_student_username(admission_no):
+    UserModel = get_user_model()
+    username = admission_no.lower()
+    if not UserModel.objects.filter(username=username).exists():
+        return username
+    counter = 2
+    while UserModel.objects.filter(username=f'{username}-{counter}').exists():
+        counter += 1
+    return f'{username}-{counter}'
+
+
+@transaction.atomic
+def admit_application(application, request):
+    if Admission.objects.filter(application=application).exists():
+        raise ValidationError('This application already has an admission record.')
+    if not application_requirements_satisfied(application):
+        raise ValidationError('Admission cannot be issued until all required school requirements are satisfied.')
+
+    admission_no = generate_admission_no()
+    name_parts = application.applicant_name.split()
+    first_name = name_parts[0] if name_parts else application.applicant_name
+    last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+
+    UserModel = get_user_model()
+    user = UserModel(
+        username=unique_student_username(admission_no),
+        first_name=first_name,
+        last_name=last_name,
+        role=UserModel.Role.STUDENT,
+        status=UserModel.Status.ACTIVE,
+    )
+    user.set_unusable_password()
+    user.save()
+
+    student = Student.objects.create(
+        user=user,
+        admission_no=admission_no,
+        first_name=first_name,
+        last_name=last_name,
+        gender=application.gender,
+        dob=application.dob,
+        status='active',
+    )
+
+    academic_year = AcademicYear.objects.filter(status='active').order_by('-start_date', '-id').first()
+    if academic_year is None:
+        academic_year = AcademicYear.objects.order_by('-start_date', '-id').first()
+    if application.applied_class and academic_year:
+        Enrollment.objects.create(
+            student=student,
+            school_class=application.applied_class,
+            year=academic_year,
+            status='active',
+        )
+
+    admission = Admission.objects.create(
+        application=application,
+        student=student,
+        approved_by=get_current_staff(request.user),
+        admission_no=admission_no,
+        status='active',
+    )
+    application.status = 'admitted'
+    application.save(update_fields=['status', 'updated_at'])
+    log_audit(AuditLog.Action.CREATE, admission, request, 'Application admitted after all requirements were satisfied.')
+    return admission
 
 
 def latest_payment_for_student(student):
@@ -1180,6 +1379,8 @@ MANAGED_MODELS = {
     'vehicles': Vehicle,
     'transport-allocations': TransportAllocation,
     'online-applications': OnlineApplication,
+    'application-requirements': ApplicationRequirement,
+    'application-requirement-checks': ApplicationRequirementCheck,
     'application-documents': ApplicationDocument,
     'admissions': Admission,
     'documents': Document,
@@ -1213,7 +1414,7 @@ MANAGED_GROUPS = [
     {
         'name': 'Admissions',
         'description': 'Online applications, uploaded application documents, and admissions.',
-        'models': ['online-applications', 'application-documents', 'admissions'],
+        'models': ['online-applications', 'application-requirements', 'application-requirement-checks', 'application-documents', 'admissions'],
     },
     {
         'name': 'Student Services',

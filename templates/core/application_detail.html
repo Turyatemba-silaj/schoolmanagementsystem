@@ -5,7 +5,7 @@
     <div>
         <p class="text-uppercase text-success fw-bold mb-1">Admissions Review</p>
         <h1>{{ application.applicant_name }}</h1>
-        <p class="text-muted mb-0">{{ application.application_no }} · {{ application.status }}</p>
+        <p class="text-muted mb-0">{{ application.application_no }} &middot; {{ application.status }}</p>
     </div>
     <a class="btn btn-outline-secondary" href="{% url 'application_edit' application.pk %}">Edit Application</a>
 </div>
@@ -35,9 +35,74 @@
         <div class="section-panel h-100">
             <h2>Admission Links</h2>
             {% for admission in admissions %}
-                <div class="record-row"><strong>{{ admission.admission_no }}</strong><span>{{ admission.student }} · {{ admission.status }}</span></div>
+                <div class="record-row"><strong>{{ admission.admission_no }}</strong><span>{{ admission.student }} &middot; {{ admission.status }}</span></div>
             {% empty %}<p class="text-muted">No admission has been created from this application.</p>{% endfor %}
         </div>
     </div>
+</div>
+
+<div class="section-panel mt-4">
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+        <div>
+            <h2>School Requirements</h2>
+            <p class="text-muted mb-0">Tick every required item only after the applicant has satisfied it.</p>
+        </div>
+        {% if requirements_satisfied %}
+            <span class="badge text-bg-success">Ready for admission</span>
+        {% else %}
+            <span class="badge text-bg-warning">Requirements pending</span>
+        {% endif %}
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_requirements">
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Requirement</th>
+                        <th>Required</th>
+                        <th>Satisfied</th>
+                        <th>Review Note</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for check in requirement_checks %}
+                        <tr>
+                            <td>
+                                <strong>{{ check.requirement.requirement_name }}</strong>
+                                {% if check.requirement.description %}
+                                    <div class="text-muted small">{{ check.requirement.description }}</div>
+                                {% endif %}
+                            </td>
+                            <td>{% if check.requirement.is_required %}Yes{% else %}No{% endif %}</td>
+                            <td>
+                                <input class="form-check-input" type="checkbox" name="requirement_{{ check.requirement_id }}" {% if check.is_satisfied %}checked{% endif %}>
+                            </td>
+                            <td>
+                                <input class="form-control" type="text" name="note_{{ check.requirement_id }}" value="{{ check.note }}" placeholder="Optional note">
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="4">No school requirements have been configured.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <button class="btn btn-outline-primary" type="submit">Save Requirements</button>
+    </form>
+</div>
+
+<div class="section-panel mt-4">
+    <h2>Issue Admission</h2>
+    <p class="text-muted">Admission number and student record are created only after all required school requirements are satisfied.</p>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="issue_admission">
+        <button class="btn btn-success" type="submit" {% if not requirements_satisfied or admissions %}disabled{% endif %}>
+            Issue Admission Number
+        </button>
+    </form>
 </div>
 {% endblock %}

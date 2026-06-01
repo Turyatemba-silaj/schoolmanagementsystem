@@ -85,6 +85,17 @@ class ClassForm(BootstrapModelForm):
 
 
 class ApplicationForm(BootstrapModelForm):
+    document_type = forms.CharField(
+        label='Supporting Document Type',
+        required=False,
+        help_text='Example: Birth certificate, previous school report, medical form.',
+    )
+    document_file = forms.FileField(
+        label='Supporting Document',
+        required=False,
+        help_text='Upload a requirement document if available.',
+    )
+
     class Meta:
         model = OnlineApplication
         fields = [
@@ -93,11 +104,20 @@ class ApplicationForm(BootstrapModelForm):
             'gender',
             'previous_school',
             'applied_class',
-            'status',
+            'document_type',
+            'document_file',
         ]
         widgets = {
             'dob': forms.DateInput(attrs={'type': 'date'}),
         }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        document_type = cleaned_data.get('document_type')
+        document_file = cleaned_data.get('document_file')
+        if bool(document_type) != bool(document_file):
+            raise forms.ValidationError('Enter both the supporting document type and the document file.')
+        return cleaned_data
 
 
 class PaymentForm(BootstrapModelForm):

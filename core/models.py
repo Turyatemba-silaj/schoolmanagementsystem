@@ -779,6 +779,41 @@ class OnlineApplication(TimestampedModel):
         return application_no
 
 
+class ApplicationRequirement(TimestampedModel):
+    requirement_name = models.CharField(max_length=160)
+    description = models.TextField(blank=True)
+    applied_class = models.ForeignKey(SchoolClass, on_delete=models.CASCADE, null=True, blank=True)
+    is_required = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=32, default='active')
+
+    class Meta:
+        ordering = ('sort_order', 'requirement_name')
+        unique_together = ('requirement_name', 'applied_class')
+
+    def __str__(self):
+        if self.applied_class:
+            return f'{self.requirement_name} - {self.applied_class}'
+        return self.requirement_name
+
+
+class ApplicationRequirementCheck(TimestampedModel):
+    application = models.ForeignKey(OnlineApplication, on_delete=models.CASCADE, related_name='requirement_checks')
+    requirement = models.ForeignKey(ApplicationRequirement, on_delete=models.CASCADE)
+    is_satisfied = models.BooleanField(default=False)
+    note = models.TextField(blank=True)
+    reviewed_by = models.ForeignKey(Staff, on_delete=models.SET_NULL, null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ('requirement__sort_order', 'requirement__requirement_name')
+        unique_together = ('application', 'requirement')
+
+    def __str__(self):
+        status = 'Satisfied' if self.is_satisfied else 'Pending'
+        return f'{self.application.application_no} - {self.requirement.requirement_name} - {status}'
+
+
 class ApplicationDocument(TimestampedModel):
     application = models.ForeignKey(OnlineApplication, on_delete=models.CASCADE, related_name='documents')
     document_type = models.CharField(max_length=128)
